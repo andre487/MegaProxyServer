@@ -84,9 +84,9 @@ chmod 0600 "$inventory_file"
 ./mega-proxy --inventory "$inventory_file" verify
 
 for instance in "${instances[@]}"; do
-  sudo lxc exec "$instance" -- sshd -T -C user=root,host=localhost,addr=127.0.0.1 | grep -qx 'permitrootlogin no'
-  sudo lxc exec "$instance" -- sshd -T -C user=ci-admin,host=localhost,addr=127.0.0.1 | grep -qx 'passwordauthentication no'
-  sudo lxc exec "$instance" -- sshd -T -C user=mp-ci,host=localhost,addr=127.0.0.1 | grep -qx 'passwordauthentication yes'
+  sudo lxc exec "$instance" -- sshd -T -C user=root,host=localhost,addr=127.0.0.1 | grep -x 'permitrootlogin no' >/dev/null
+  sudo lxc exec "$instance" -- sshd -T -C user=ci-admin,host=localhost,addr=127.0.0.1 | grep -x 'passwordauthentication no' >/dev/null
+  sudo lxc exec "$instance" -- sshd -T -C user=mp-ci,host=localhost,addr=127.0.0.1 | grep -x 'passwordauthentication yes' >/dev/null
 done
 
 second_run="$work_dir/second-run.log"
