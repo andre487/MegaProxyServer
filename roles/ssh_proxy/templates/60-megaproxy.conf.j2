@@ -1,0 +1,14 @@
+Match Group megaproxy
+    AuthorizedKeysFile /etc/ssh/megaproxy_authorized_keys/%u
+    AuthenticationMethods any
+    PasswordAuthentication yes
+    KbdInteractiveAuthentication no
+    AllowAgentForwarding no
+    AllowTcpForwarding local
+    X11Forwarding no
+    PermitTTY no
+    PermitTunnel no
+    GatewayPorts no
+    MaxSessions 0
+    ClientAliveInterval 60
+    ClientAliveCountMax 3

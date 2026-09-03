@@ -151,6 +151,11 @@ activemq-data/
 .env
 .envrc
 .venv
+/inventory.yml
+/inventory.yaml
+/inventory-path
+/.secrets/
+/.generated/
 env/
 venv/
 ENV/

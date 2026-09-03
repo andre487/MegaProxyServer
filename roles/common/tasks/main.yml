@@ -1,0 +1,36 @@
+---
+- name: Install common packages
+  ansible.builtin.apt:
+    update_cache: true
+    cache_valid_time: 3600
+    name: >-
+      {{
+        [
+          'ca-certificates',
+          'curl',
+          'openssl',
+          'sudo',
+          'openssh-server',
+          'systemd-timesyncd',
+          'ufw',
+          'fail2ban',
+          'unattended-upgrades'
+        ]
+        + (['docker.io'] if megaproxy_services.https is defined and megaproxy_services.https.enabled else [])
+      }}
+    state: present
+    lock_timeout: 600
+
+- name: Enable time synchronization
+  ansible.builtin.systemd_service:
+    name: systemd-timesyncd
+    enabled: true
+    state: started
+  when: ansible_facts["service_mgr"] == "systemd"
+
+- name: Enable unattended upgrades
+  ansible.builtin.systemd_service:
+    name: unattended-upgrades
+    enabled: true
+    state: started
+  when: megaproxy_settings.unattended_upgrades | bool

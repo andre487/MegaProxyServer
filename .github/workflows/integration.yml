@@ -1,0 +1,71 @@
+name: Host provisioning
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    - cron: "23 3 * * 1"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: provisioning-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ubuntu:
+    name: Ubuntu 24.04 host
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          version: "0.12.5"
+          python-version: "3.12"
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Install and initialize LXD
+        run: |
+          sudo snap install lxd --channel=5.21/stable || sudo snap refresh lxd --channel=5.21/stable
+          sudo lxd waitready
+          sudo lxd init --auto
+
+      - name: Provision and verify host
+        run: tests/integration/lxd.sh ubuntu:24.04 1
+
+  two-host-jump:
+    name: Debian 12 two-host Jump
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          version: "0.12.5"
+          python-version: "3.12"
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Install and initialize LXD
+        run: |
+          sudo snap install lxd --channel=5.21/stable || sudo snap refresh lxd --channel=5.21/stable
+          sudo lxd waitready
+          sudo lxd init --auto
+
+      - name: Provision and verify two hosts and Jump
+        run: tests/integration/lxd.sh images:debian/12/cloud 2

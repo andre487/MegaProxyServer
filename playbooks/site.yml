@@ -1,0 +1,46 @@
+---
+- name: Configure MegaProxy servers
+  hosts: all
+  become: true
+  gather_facts: true
+  pre_tasks:
+    - name: Validate supported operating system
+      ansible.builtin.assert:
+        that:
+          - ansible_facts["os_family"] == "Debian"
+          - ansible_facts["distribution"] in ["Debian", "Ubuntu"]
+          - megaproxy_services is mapping
+        fail_msg: "Only current Debian and Ubuntu releases are supported"
+      tags: [always, preflight]
+  roles:
+    - role: common
+      tags: [common]
+    - role: admin
+      tags: [admin, ssh]
+    - role: firewall
+      when: megaproxy_settings.manage_firewall | bool
+      tags: [firewall]
+    - role: ssh_proxy
+      when: megaproxy_services.ssh is defined and megaproxy_services.ssh.enabled | bool
+      tags: [ssh]
+    - role: https_proxy
+      when: megaproxy_services.https is defined and megaproxy_services.https.enabled | bool
+      tags: [https]
+  post_tasks:
+    - name: Create MegaProxy state directory
+      ansible.builtin.file:
+        path: /etc/megaproxy
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+      tags: [always]
+
+    - name: Mark successful MegaProxy provisioning
+      ansible.builtin.copy:
+        dest: /etc/megaproxy/managed
+        content: "Managed by MegaProxyServer Ansible\n"
+        owner: root
+        group: root
+        mode: "0644"
+      tags: [always]

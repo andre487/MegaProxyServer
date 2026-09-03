@@ -1,0 +1,43 @@
+---
+- name: Build firewall port list
+  ansible.builtin.set_fact:
+    megaproxy_allowed_ports: >-
+      {{ ([ansible_port | default(22)])
+         + ([megaproxy_services.ssh.port] if megaproxy_services.ssh is defined and megaproxy_services.ssh.enabled else [])
+         + ([megaproxy_services.https.port] if megaproxy_services.https is defined and megaproxy_services.https.enabled else [])
+         + ([80] if megaproxy_services.https is defined and megaproxy_services.https.enabled and megaproxy_services.https.certificate != 'self-signed' else [])
+      | map('string') | unique | list }}
+
+- name: Allow required ports before enabling firewall
+  ansible.builtin.command: "ufw allow {{ item }}/tcp"
+  loop: "{{ megaproxy_allowed_ports }}"
+  register: ufw_allow
+  changed_when: "'Rule added' in ufw_allow.stdout"
+
+- name: Read firewall policy
+  ansible.builtin.command: ufw status verbose
+  register: ufw_policy
+  changed_when: false
+  check_mode: false
+
+- name: Set incoming policy
+  ansible.builtin.command: ufw default deny incoming
+  register: ufw_incoming
+  changed_when: "'Default incoming policy changed' in ufw_incoming.stdout"
+  when: "'Default: deny (incoming)' not in ufw_policy.stdout"
+
+- name: Set outgoing policy
+  ansible.builtin.command: ufw default allow outgoing
+  register: ufw_outgoing
+  changed_when: "'Default outgoing policy changed' in ufw_outgoing.stdout"
+  when: "'allow (outgoing)' not in ufw_policy.stdout"
+
+- name: Read firewall status
+  ansible.builtin.command: ufw status
+  register: ufw_status
+  changed_when: false
+  check_mode: false
+
+- name: Enable firewall
+  ansible.builtin.command: ufw --force enable
+  when: "'Status: active' not in ufw_status.stdout"

@@ -1,0 +1,40 @@
+version: 1
+settings:
+  manage_firewall: true
+  unattended_upgrades: true
+users:
+  https:
+    - name: alice
+      password: REPLACE_WITH_AT_LEAST_16_CHARACTERS
+  ssh:
+    - name: mp-alice
+      authentication:
+        type: key
+        public_key: ssh-ed25519 REPLACE_WITH_PUBLIC_KEY MegaProxy
+        generated_private_key: ~/.ssh/megaproxy_alice
+  removed_ssh: []
+hosts:
+  proxy_eu:
+    address: 203.0.113.10
+    admin:
+      user: deploy
+      bootstrap_user: root
+      port: 22
+      private_key_file: ~/.ssh/id_ed25519
+      public_key: ssh-ed25519 REPLACE_WITH_ADMIN_PUBLIC_KEY MegaProxy-admin
+    services:
+      https:
+        enabled: true
+        endpoint: example.com
+        port: 443
+        certificate: domain
+        acme_email: admin@example.com
+        gost_version: 3.2.6
+        certbot_version: v5.4.0
+        probe_resistance:
+          enabled: true
+          mode: local_decoy
+          site_title: Personal site
+      ssh:
+        enabled: true
+        port: 22

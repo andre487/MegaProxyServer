@@ -1,0 +1,36 @@
+[project]
+name = "megaproxy-server"
+version = "0.1.0"
+description = "Provision hardened HTTPS and SSH proxy servers for MegaProxy"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+  "ansible-core>=2.19,<2.21",
+  "passlib>=1.7.4,<2",
+  "pydantic>=2.11,<3",
+  "questionary>=2.1,<3",
+  "ruamel-yaml>=0.18,<0.19",
+]
+
+[dependency-groups]
+dev = [
+  "pytest>=8.4,<10",
+  "ruff>=0.12,<0.15",
+]
+
+[project.scripts]
+megaproxy-server = "megaproxy_server.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/megaproxy_server"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"

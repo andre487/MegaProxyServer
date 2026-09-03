@@ -1,0 +1,33 @@
+services:
+  - name: web
+    addr: ":{{ megaproxy_services.https.port }}"
+    handler:
+      type: http2
+      auther: megaproxy-users
+      metadata:
+{% if megaproxy_services.https.probe_resistance.enabled %}
+        probeResist: "file:/opt/megaproxy/decoy.html"
+{% endif %}
+        proxyAgent: ""
+    listener:
+      type: http2
+      tls:
+        certFile: {{ megaproxy_container_certificate_directory }}/fullchain.pem
+        keyFile: {{ megaproxy_container_certificate_directory }}/privkey.pem
+{% if megaproxy_services.https.certificate == 'domain' %}
+        rejectUnknownSNI: true
+        serverNames:
+          - {{ megaproxy_services.https.endpoint | to_json }}
+{% endif %}
+        options:
+          minVersion: VersionTLS12
+          maxVersion: VersionTLS13
+          alpn: [h2, http/1.1]
+
+authers:
+  - name: megaproxy-users
+    auths:
+{% for user in megaproxy_services.https.users %}
+      - username: {{ user.name | to_json }}
+        password: {{ user.password | to_json }}
+{% endfor %}

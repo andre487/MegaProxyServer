@@ -1,0 +1,23 @@
+#!/usr/bin/env python3
+"""Dependency-free launcher. Project dependencies are always installed by uv."""
+
+from __future__ import annotations
+
+import os
+import shutil
+import sys
+from pathlib import Path
+
+
+def main() -> None:
+    uv = shutil.which("uv")
+    if uv is None:
+        print("uv is required. Install it from https://docs.astral.sh/uv/", file=sys.stderr)
+        raise SystemExit(127)
+    root = Path(__file__).resolve().parent
+    os.chdir(root)
+    os.execv(uv, [uv, "run", "--frozen", "megaproxy-server", *sys.argv[1:]])
+
+
+if __name__ == "__main__":
+    main()

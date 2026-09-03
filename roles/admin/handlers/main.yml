@@ -1,0 +1,10 @@
+---
+- name: Validate and reload administrative ssh policy
+  ansible.builtin.command: /usr/sbin/sshd -t
+  changed_when: false
+  notify: Reload ssh after administrative policy
+
+- name: Reload ssh after administrative policy
+  ansible.builtin.systemd_service:
+    name: ssh
+    state: reloaded

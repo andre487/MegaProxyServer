@@ -1,0 +1,143 @@
+---
+- name: Validate HTTPS service variables
+  ansible.builtin.assert:
+    that:
+      - megaproxy_services.https.users | length > 0
+
+- name: Enable Docker
+  ansible.builtin.systemd_service:
+    name: docker
+    enabled: true
+    state: started
+  when: not ansible_check_mode
+
+- name: Create private configuration directory
+  ansible.builtin.file:
+    path: /opt/megaproxy
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+
+- name: Select certificate directory
+  ansible.builtin.set_fact:
+    megaproxy_certificate_directory: >-
+      {{ '/opt/megaproxy/certificates' if megaproxy_services.https.certificate == 'self-signed'
+         else '/etc/letsencrypt/live/' ~ megaproxy_services.https.endpoint }}
+    megaproxy_container_certificate_directory: >-
+      {{ '/certificates' if megaproxy_services.https.certificate == 'self-signed'
+         else '/etc/letsencrypt/live/' ~ megaproxy_services.https.endpoint }}
+    megaproxy_certificate_volume: >-
+      {{ '/opt/megaproxy/certificates:/certificates:ro' if megaproxy_services.https.certificate == 'self-signed'
+         else '/etc/letsencrypt:/etc/letsencrypt:ro' }}
+
+- name: Check current certificate
+  ansible.builtin.stat:
+    path: "{{ megaproxy_certificate_directory }}/fullchain.pem"
+  register: megaproxy_certificate
+
+- name: Create self-signed certificate directory
+  ansible.builtin.file:
+    path: /opt/megaproxy/certificates
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+  when: megaproxy_services.https.certificate == "self-signed"
+
+- name: Create self-signed certificate
+  ansible.builtin.command:
+    argv: [openssl, req, -x509, -newkey, rsa:3072, -nodes, -days, "365", -subj, "/CN={{ megaproxy_services.https.endpoint }}", -addext, "subjectAltName={{ megaproxy_https_san_type }}:{{ megaproxy_services.https.endpoint }}", -keyout, /opt/megaproxy/certificates/privkey.pem, -out, /opt/megaproxy/certificates/fullchain.pem]
+  when:
+    - megaproxy_services.https.certificate == "self-signed"
+    - not megaproxy_certificate.stat.exists
+  no_log: true
+
+- name: Obtain domain certificate
+  ansible.builtin.command:
+    argv: [docker, run, --rm, --network, host, -v, /etc/letsencrypt:/etc/letsencrypt, -v, /var/lib/letsencrypt:/var/lib/letsencrypt, "certbot/certbot:{{ megaproxy_services.https.certbot_version }}", certonly, --standalone, --non-interactive, --agree-tos, --no-eff-email, --email, "{{ megaproxy_services.https.acme_email }}", --domain, "{{ megaproxy_services.https.endpoint }}"]
+  when:
+    - megaproxy_services.https.certificate == "domain"
+    - not megaproxy_certificate.stat.exists
+
+- name: Obtain public IP certificate
+  ansible.builtin.command:
+    argv: [docker, run, --rm, --network, host, -v, /etc/letsencrypt:/etc/letsencrypt, -v, /var/lib/letsencrypt:/var/lib/letsencrypt, "certbot/certbot:{{ megaproxy_services.https.certbot_version }}", certonly, --standalone, --non-interactive, --agree-tos, --no-eff-email, --email, "{{ megaproxy_services.https.acme_email }}", --preferred-profile, shortlived, --ip-address, "{{ megaproxy_services.https.endpoint }}"]
+  when:
+    - megaproxy_services.https.certificate == "ip-acme"
+    - not megaproxy_certificate.stat.exists
+
+- name: Install active-probe decoy page
+  ansible.builtin.template:
+    src: decoy.html.j2
+    dest: /opt/megaproxy/decoy.html
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart MegaProxy GOST
+
+- name: Install secret GOST configuration
+  ansible.builtin.template:
+    src: gost.yml.j2
+    dest: /opt/megaproxy/gost.yml
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true
+  notify: Restart MegaProxy GOST
+
+- name: Install GOST systemd service
+  ansible.builtin.template:
+    src: megaproxy-gost.service.j2
+    dest: /etc/systemd/system/megaproxy-gost.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart MegaProxy GOST
+
+- name: Install containerized certificate renewal service
+  ansible.builtin.template:
+    src: megaproxy-certbot-renew.service.j2
+    dest: /etc/systemd/system/megaproxy-certbot-renew.service
+    owner: root
+    group: root
+    mode: "0644"
+  when: megaproxy_services.https.certificate != "self-signed"
+
+- name: Install certificate renewal timer
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/megaproxy-certbot-renew.timer
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      [Unit]
+      Description=Renew MegaProxy TLS certificate
+
+      [Timer]
+      OnBootSec=10min
+      OnUnitActiveSec=12h
+      RandomizedDelaySec=1h
+      Persistent=true
+
+      [Install]
+      WantedBy=timers.target
+  when: megaproxy_services.https.certificate != "self-signed"
+
+- name: Enable certificate renewal timer
+  ansible.builtin.systemd_service:
+    name: megaproxy-certbot-renew.timer
+    enabled: true
+    state: started
+    daemon_reload: true
+  when:
+    - megaproxy_services.https.certificate != "self-signed"
+    - not ansible_check_mode
+
+- name: Enable GOST service
+  ansible.builtin.systemd_service:
+    name: megaproxy-gost
+    enabled: true
+    state: started
+    daemon_reload: true
+  when: not ansible_check_mode

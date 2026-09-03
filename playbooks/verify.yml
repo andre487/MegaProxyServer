@@ -1,0 +1,145 @@
+---
+- name: Verify MegaProxy servers
+  hosts: all
+  become: true
+  gather_facts: false
+  pre_tasks:
+    - name: Check whether MegaProxy was applied
+      ansible.builtin.stat:
+        path: /etc/megaproxy/managed
+      register: megaproxy_managed
+
+    - name: Require an applied MegaProxy configuration
+      ansible.builtin.assert:
+        that: megaproxy_managed.stat.exists
+        fail_msg: "This host has not been provisioned yet. Run './mega-proxy apply' before verify."
+
+    - name: Check Docker installation
+      ansible.builtin.stat:
+        path: /usr/bin/docker
+      register: megaproxy_docker
+      when: megaproxy_services.https is defined and megaproxy_services.https.enabled | bool
+
+    - name: Require Docker for HTTPS verification
+      ansible.builtin.assert:
+        that: megaproxy_docker.stat.exists
+        fail_msg: "HTTPS provisioning is incomplete: /usr/bin/docker is missing. Run './mega-proxy apply'."
+      when: megaproxy_services.https is defined and megaproxy_services.https.enabled | bool
+  tasks:
+    - name: Validate sshd configuration
+      ansible.builtin.command: sshd -t
+      changed_when: false
+      when: megaproxy_services.ssh is defined and megaproxy_services.ssh.enabled | bool
+
+    - name: Read MegaProxy SSH host fingerprint
+      ansible.builtin.command: ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub
+      register: ssh_fingerprint
+      changed_when: false
+      when: megaproxy_services.ssh is defined and megaproxy_services.ssh.enabled | bool
+
+    - name: Show SSH host fingerprint
+      ansible.builtin.debug:
+        var: ssh_fingerprint.stdout
+      when: ssh_fingerprint is not skipped
+
+    - name: Check HTTPS container
+      ansible.builtin.command: docker inspect --format={{ '{{' }}.State.Running{{ '}}' }} megaproxy-gost
+      register: gost_health
+      changed_when: false
+      when: megaproxy_services.https is defined and megaproxy_services.https.enabled | bool
+
+    - name: Require healthy HTTPS proxy
+      ansible.builtin.assert:
+        that: gost_health.stdout == "true"
+        fail_msg: >-
+          The GOST container is not running (Running={{ gost_health.stdout }}).
+          Inspect it with: journalctl -u megaproxy-gost.service -n 50 --no-pager
+      when: gost_health is not skipped
+
+    - name: Verify unauthenticated HTTPS gets a decoy instead of proxy challenge
+      ansible.builtin.command:
+        argv: >-
+          {{
+            ['curl', '--silent', '--show-error', '--fail', '--http2', '--max-time', '15',
+             '--write-out', '\n%{http_code}']
+            + (['--insecure'] if megaproxy_services.https.certificate == 'self-signed' else [])
+            + ['https://' ~ megaproxy_services.https.endpoint ~ ':' ~ (megaproxy_services.https.port | string) ~ '/']
+          }}
+      register: decoy_response
+      changed_when: false
+      delegate_to: localhost
+      become: false
+      when:
+        - megaproxy_services.https is defined
+        - megaproxy_services.https.enabled | bool
+        - megaproxy_services.https.probe_resistance.enabled | bool
+
+    - name: Ensure decoy does not disclose proxy software
+      ansible.builtin.assert:
+        that:
+          - decoy_response.rc == 0
+          - decoy_response.stdout.endswith('\n200')
+          - "'proxy-authenticate' not in (decoy_response.stdout | lower)"
+          - "'gost' not in (decoy_response.stdout | lower)"
+          - "'megaproxy' not in (decoy_response.stdout | lower)"
+      when: decoy_response is not skipped
+
+    - name: Probe CONNECT without credentials
+      ansible.builtin.command:
+        argv:
+          - curl
+          - --verbose
+          - --max-time
+          - "15"
+          - --proxy-insecure
+          - --proxy-http2
+          - --proxy
+          - "https://{{ megaproxy_services.https.endpoint }}:{{ megaproxy_services.https.port }}"
+          - "https://example.com/"
+      register: unauthenticated_connect
+      changed_when: false
+      failed_when: false
+      delegate_to: localhost
+      become: false
+      when:
+        - megaproxy_services.https is defined
+        - megaproxy_services.https.enabled | bool
+        - megaproxy_services.https.probe_resistance.enabled | bool
+
+    - name: Ensure an active probe does not receive a proxy challenge
+      ansible.builtin.assert:
+        that: "'407' not in unauthenticated_connect.stderr"
+      when: unauthenticated_connect is not skipped
+
+    - name: Probe authenticated HTTPS CONNECT
+      ansible.builtin.command:
+        argv:
+          - curl
+          - --verbose
+          - --max-time
+          - "30"
+          - --proxy-insecure
+          - --proxy-http2
+          - --proxy
+          - "https://{{ megaproxy_services.https.endpoint }}:{{ megaproxy_services.https.port }}"
+          - --proxy-user
+          - "{{ megaproxy_services.https.users[0].name }}:{{ megaproxy_services.https.users[0].password }}"
+          - "https://example.com/"
+      register: authenticated_connect
+      changed_when: false
+      failed_when: false
+      no_log: true
+      delegate_to: localhost
+      become: false
+      when: megaproxy_services.https is defined and megaproxy_services.https.enabled | bool
+
+    - name: Require successful authenticated HTTPS CONNECT
+      ansible.builtin.assert:
+        that:
+          - >-
+            authenticated_connect.rc == 0 or
+            'CONNECT tunnel established, response 200' in authenticated_connect.stderr
+        fail_msg: >-
+          Authenticated CONNECT was not established. The curl output is hidden because it may
+          contain proxy credentials; inspect the GOST service journal for authentication errors.
+      when: megaproxy_services.https is defined and megaproxy_services.https.enabled | bool

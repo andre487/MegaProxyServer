@@ -1,0 +1,7 @@
+---
+- name: Restart MegaProxy GOST
+  ansible.builtin.systemd_service:
+    name: megaproxy-gost
+    state: restarted
+    daemon_reload: true
+  when: not ansible_check_mode

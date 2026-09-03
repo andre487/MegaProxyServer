@@ -1,0 +1,109 @@
+---
+- name: Validate SSH service variables
+  ansible.builtin.assert:
+    that:
+      - megaproxy_services.ssh.users | length > 0
+
+- name: Create restricted MegaProxy group
+  ansible.builtin.group:
+    name: megaproxy
+    system: true
+
+- name: Remove retired SSH proxy users
+  ansible.builtin.user:
+    name: "{{ item }}"
+    state: absent
+    remove: true
+  loop: "{{ megaproxy_services.ssh.removed_users | default([]) }}"
+
+- name: Remove authorized keys of retired SSH proxy users
+  ansible.builtin.file:
+    path: "/etc/ssh/megaproxy_authorized_keys/{{ item }}"
+    state: absent
+  loop: "{{ megaproxy_services.ssh.removed_users | default([]) }}"
+
+- name: Create restricted SSH proxy users
+  ansible.builtin.user:
+    name: "{{ item.name }}"
+    group: megaproxy
+    groups: ""
+    append: false
+    create_home: false
+    shell: /usr/sbin/nologin
+    password: "{{ item.authentication.password_hash | default('!') }}"
+    password_lock: "{{ item.authentication.type != 'password' }}"
+    update_password: always
+  loop: "{{ megaproxy_services.ssh.users }}"
+  no_log: true
+
+- name: Create root-owned authorized keys directory
+  ansible.builtin.file:
+    path: /etc/ssh/megaproxy_authorized_keys
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Install restricted authorized keys
+  ansible.builtin.copy:
+    dest: "/etc/ssh/megaproxy_authorized_keys/{{ item.name }}"
+    content: "restrict,port-forwarding {{ item.authentication.public_key }}\n"
+    owner: root
+    group: root
+    mode: "0644"
+  loop: "{{ megaproxy_services.ssh.users }}"
+  when: item.authentication.type == "key"
+  no_log: true
+
+- name: Remove key files for password-only users
+  ansible.builtin.file:
+    path: "/etc/ssh/megaproxy_authorized_keys/{{ item.name }}"
+    state: absent
+  loop: "{{ megaproxy_services.ssh.users }}"
+  when: item.authentication.type == "password"
+  no_log: true
+
+- name: Install hardened SSH proxy configuration
+  ansible.builtin.template:
+    src: 60-megaproxy.conf.j2
+    dest: /etc/ssh/sshd_config.d/60-megaproxy.conf
+    owner: root
+    group: root
+    mode: "0644"
+    validate: /usr/sbin/sshd -t -f %s
+  notify: Validate and reload ssh
+
+- name: Configure unauthenticated SSH connection limits
+  ansible.builtin.copy:
+    dest: /etc/ssh/sshd_config.d/59-megaproxy-limits.conf
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      Port {{ ansible_port | default(22) }}
+      {% if megaproxy_services.ssh.port | int != ansible_port | default(22) | int %}
+      Port {{ megaproxy_services.ssh.port }}
+      {% endif %}
+      MaxStartups {{ megaproxy_services.ssh.max_startups }}
+      PerSourceMaxStartups {{ megaproxy_services.ssh.per_source_max_startups }}
+  notify: Validate and reload ssh
+
+- name: Enable SSH fail2ban jail
+  ansible.builtin.copy:
+    dest: /etc/fail2ban/jail.d/megaproxy-sshd.local
+    mode: "0644"
+    content: |
+      [sshd]
+      enabled = true
+      backend = systemd
+      bantime.increment = true
+      findtime = 10m
+      maxretry = 6
+  when: megaproxy_services.ssh.fail2ban | bool
+  notify: Restart fail2ban
+
+- name: Ensure SSH is enabled
+  ansible.builtin.systemd_service:
+    name: ssh
+    enabled: true
+    state: started
