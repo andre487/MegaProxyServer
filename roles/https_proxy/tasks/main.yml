@@ -53,7 +53,8 @@
     megaproxy_certificate_needs_issue: >-
       {{
         not megaproxy_certificate.stat.exists or
-        (megaproxy_certificate_hostname_checks.results | default([]) | selectattr('rc', 'ne', 0) | list | length > 0)
+        (megaproxy_certificate_hostname_checks.results | default([]) | selectattr('rc', 'ne', 0) | list | length > 0) or
+        (megaproxy_certificate_hostname_checks.results | default([]) | selectattr('stdout', 'search', 'does NOT match certificate') | list | length > 0)
       }}
 
 - name: Create self-signed certificate directory
@@ -135,6 +136,13 @@
 
 - name: Activate GOST backends before the public SNI router
   ansible.builtin.meta: flush_handlers
+
+- name: Ensure GOST has loaded the current certificate
+  ansible.builtin.systemd_service:
+    name: megaproxy-gost
+    state: restarted
+    daemon_reload: true
+  when: not ansible_check_mode
 
 - name: Install containerized certificate renewal service
   ansible.builtin.template:
