@@ -79,6 +79,12 @@ authorized-key files from every SSH-enabled host.
 Use `--limit HOST` and `--tags common,admin,firewall,ssh,https` with plan, apply, or verify. Always run
 `plan` before applying to an existing server and keep the current administrative SSH session open.
 
+After a successful `apply`, executable `.hooks/post-config-change` and files in
+`.hooks/post-config-change.d/` are run in name order. The ignored `.hooks` directory is intended for
+machine-local integrations and secrets. Hooks receive `MEGAPROXY_INVENTORY`,
+`MEGAPROXY_ANSIBLE_INVENTORY`, `MEGAPROXY_ROOT`, and `MEGAPROXY_EVENT`. Use `--no-hooks` before or
+after the command to skip them, for example `./mega-proxy apply --no-hooks`.
+
 ## HTTPS
 
 HTTPS uses a pinned GOST v3 container, TLS 1.2/1.3, Basic authentication and HTTP/2 CONNECT. Invalid

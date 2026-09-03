@@ -11,6 +11,7 @@ from pydantic import ValidationError
 
 from .export import export_profiles, jump_candidates
 from .generate import generate
+from .hooks import run_hooks
 from .inventory import DEFAULT_INVENTORY, ROOT, discover, load, save, write_ansible_inventory
 from .summary import render_summary
 from .users import active_users, remove_users
@@ -20,24 +21,32 @@ from .wizard import create_inventory
 def parser() -> argparse.ArgumentParser:
     result = argparse.ArgumentParser(description="Configure MegaProxy HTTPS and SSH servers")
     result.add_argument("--inventory", "-i", help="Inventory configuration path")
+    result.add_argument("--no-hooks", action="store_true", help="Do not run local hooks")
     sub = result.add_subparsers(dest="command")
-    sub.add_parser("inventory", help="Create a new inventory")
-    sub.add_parser("validate", help="Validate inventory and Ansible syntax")
-    sub.add_parser("check", help="Run the complete local/CI test suite")
+    commands = []
+    commands.append(sub.add_parser("inventory", help="Create a new inventory"))
+    commands.append(sub.add_parser("validate", help="Validate inventory and Ansible syntax"))
+    commands.append(sub.add_parser("check", help="Run the complete local/CI test suite"))
     for name in ("plan", "apply", "verify"):
         command = sub.add_parser(name)
+        commands.append(command)
         command.add_argument("--limit")
         command.add_argument("--tags")
     export = sub.add_parser("export")
+    commands.append(export)
     export.add_argument("--output", default=".generated/megaproxy-profiles.json")
     export.add_argument("--all-jumps", action="store_true")
     configs = sub.add_parser("configs", help="Generate all supported client configuration formats")
+    commands.append(configs)
     configs.add_argument("--output-dir", default=".generated/configs")
     summary = sub.add_parser("summary", help="Print credentials for a password manager")
+    commands.append(summary)
     summary.add_argument("login", nargs="?", help="Show only this login")
-    sub.add_parser("remove-users", help="Remove one or more proxy user accounts")
-    sub.add_parser("vault-secrets", help="Encrypt only secret inventory fields with Ansible Vault")
-    sub.add_parser("jumps", help="List all possible SSH jump chains")
+    commands.append(sub.add_parser("remove-users", help="Remove one or more proxy user accounts"))
+    commands.append(sub.add_parser("vault-secrets", help="Encrypt only secret inventory fields with Ansible Vault"))
+    commands.append(sub.add_parser("jumps", help="List all possible SSH jump chains"))
+    for command in commands:
+        command.add_argument("--no-hooks", action="store_true", default=argparse.SUPPRESS, help=argparse.SUPPRESS)
     return result
 
 
@@ -196,6 +205,10 @@ def main() -> None:
         applied_admin = tags is None or "admin" in {tag.strip() for tag in tags.split(",")}
         if code == 0 and command == "apply" and applied_admin:
             finish_bootstrap(path, inventory, limit)
+        if code == 0 and command == "apply" and not args.no_hooks:
+            inventory = load(path)
+            generated = write_ansible_inventory(path, inventory)
+            code = run_hooks(ROOT, "post-config-change", path, generated)
         raise SystemExit(code)
     except (ValidationError, FileNotFoundError, ValueError) as error:
         print(f"Configuration error: {error}", file=sys.stderr)

@@ -95,3 +95,16 @@ def test_https_sni_routes_are_generated_for_every_exit() -> None:
     assert [route["hostname"] for route in routes] == ["ru.example", "proxy-ru-via-proxy-nl.chains.example"]
     projected = ansible_inventory(inventory)["all"]["hosts"]["proxy_ru"]["megaproxy_services"]["https"]
     assert projected["routes"][1]["chain"]["host"] == "nl.example"
+    public_hosts = ansible_inventory(inventory)["all"]["vars"]["megaproxy_public_https_hosts"]
+    assert public_hosts == [
+        {"name": "proxy_ru", "host": "ru.example", "port": 443, "code": "PROXY", "title": "PROXY Ru"},
+        {
+            "name": "proxy_ru_via-proxy_nl",
+            "host": "proxy-ru-via-proxy-nl.chains.example",
+            "port": 443,
+            "code": "PROXY",
+            "title": "PROXY Ru",
+        },
+        {"name": "proxy_nl", "host": "nl.example", "port": 443, "code": "PROXY", "title": "PROXY Nl"},
+    ]
+    assert ansible_inventory(inventory)["all"]["vars"]["megaproxy_users"]["https"][0]["name"] == "alice"

@@ -161,8 +161,16 @@ def _dns_label(value: str) -> str:
     return re.sub(r"[^a-z0-9-]+", "-", value.lower()).strip("-")
 
 
+def _host_title(name: str) -> str:
+    parts = name.split("_")
+    if parts[-1:] == ["proxy"]:
+        parts.pop()
+    return " ".join([parts[0].upper(), *(part.title() for part in parts[1:])])
+
+
 def ansible_inventory(inventory: Inventory) -> dict[str, Any]:
     hosts: dict[str, Any] = {}
+    public_https_hosts: list[dict[str, Any]] = []
     for name, host in inventory.hosts.items():
         services = host.services.model_dump(mode="json", exclude_none=True)
         routes: list[dict[str, Any]] = []
@@ -178,6 +186,16 @@ def ansible_inventory(inventory: Inventory) -> dict[str, Any]:
                 {"username": https.chain_username, "password": https.chain_password}
                 if inventory.settings.https_chains_enabled and https.chain_exit else None
             )
+            for route in routes:
+                public_https_hosts.append(
+                    {
+                        "name": name if route["name"] == "direct" else f"{name}_{route['name']}",
+                        "host": route["hostname"],
+                        "port": https.port,
+                        "code": name.split("_", 1)[0].upper(),
+                        "title": _host_title(name),
+                    }
+                )
         variables: dict[str, Any] = {
             "ansible_host": host.address,
             "ansible_user": host.admin.bootstrap_user or host.admin.user,
@@ -196,7 +214,15 @@ def ansible_inventory(inventory: Inventory) -> dict[str, Any]:
             except ValueError:
                 variables["megaproxy_https_san_type"] = "DNS"
         hosts[name] = variables
-    return {"all": {"hosts": hosts}}
+    return {
+        "all": {
+            "vars": {
+                "megaproxy_users": inventory.users.model_dump(mode="json"),
+                "megaproxy_public_https_hosts": public_https_hosts,
+            },
+            "hosts": hosts,
+        }
+    }
 
 
 def write_ansible_inventory(source: Path, inventory: Inventory) -> Path:

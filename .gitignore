@@ -156,6 +156,7 @@ activemq-data/
 /inventory-path
 /.secrets/
 /.generated/
+/.hooks/
 env/
 venv/
 ENV/
