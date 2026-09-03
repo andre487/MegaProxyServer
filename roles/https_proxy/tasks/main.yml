@@ -137,12 +137,24 @@
 - name: Activate GOST backends before the public SNI router
   ansible.builtin.meta: flush_handlers
 
-- name: Ensure GOST has loaded the current certificate
+- name: Check whether GOST predates the current certificate
+  ansible.builtin.shell:
+    cmd: >-
+      test "{{ megaproxy_certificate_directory }}/fullchain.pem"
+      -nt "/proc/$(systemctl show --property MainPID --value megaproxy-gost)"
+  register: megaproxy_gost_certificate_is_newer
+  changed_when: false
+  failed_when: false
+  when: not ansible_check_mode
+
+- name: Load a newer certificate into GOST
   ansible.builtin.systemd_service:
     name: megaproxy-gost
     state: restarted
     daemon_reload: true
-  when: not ansible_check_mode
+  when:
+    - not ansible_check_mode
+    - megaproxy_gost_certificate_is_newer.rc == 0
 
 - name: Install containerized certificate renewal service
   ansible.builtin.template:
