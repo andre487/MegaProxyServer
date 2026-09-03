@@ -104,6 +104,7 @@ if ! ssh -vvv -fNT -M -S "$control_socket" -i "$key_file" -o IdentitiesOnly=yes 
   ssh-keygen -lf "$key_file.pub" || true
   sudo lxc exec megaproxy-ci-one -- ssh-keygen -lf /etc/ssh/megaproxy_authorized_keys/mp-ci || true
   sudo lxc exec megaproxy-ci-one -- sh -c "sshd -T -C user=mp-ci,host=localhost,addr=127.0.0.1 | grep -E 'authorizedkeysfile|authenticationmethods|pubkeyauthentication|allowtcpforwarding|maxsessions'" || true
+  sudo lxc exec megaproxy-ci-one -- sh -c "journalctl -u ssh --since=-2min --no-pager | grep -E 'mp-ci|Authentication refused|bad ownership|auth_openkey' | sed -E 's/(from |port )[0-9a-fA-F:.]+/\1<redacted>/g'" || true
   exit 1
 fi
 echo | openssl s_client -connect 127.0.0.1:18443 -servername example.com -verify_return_error >/dev/null
