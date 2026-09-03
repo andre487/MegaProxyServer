@@ -97,13 +97,13 @@ if grep -Eq 'changed=[1-9][0-9]*' "$second_run"; then
 fi
 
 control_socket="$work_dir/direct-control"
-ssh -fNT -M -S "$control_socket" -i "$key_file" -o UserKnownHostsFile="$work_dir/known_hosts" -L 18443:example.com:443 "mp-ci@$ip_one"
+ssh -fNT -M -S "$control_socket" -i "$key_file" -o IdentitiesOnly=yes -o ExitOnForwardFailure=yes -o UserKnownHostsFile="$work_dir/known_hosts" -L 18443:example.com:443 "mp-ci@$ip_one"
 echo | openssl s_client -connect 127.0.0.1:18443 -servername example.com -verify_return_error >/dev/null
 ssh -S "$control_socket" -O exit "mp-ci@$ip_one"
 
 if [[ "$host_count" -ge 2 ]]; then
   jump_socket="$work_dir/jump-control"
-  ssh -fNT -M -S "$jump_socket" -i "$key_file" -o UserKnownHostsFile="$work_dir/known_hosts" -o "ProxyJump=mp-ci@$ip_one" -L 19443:example.com:443 "mp-ci@$ip_two"
+  ssh -fNT -M -S "$jump_socket" -i "$key_file" -o IdentitiesOnly=yes -o ExitOnForwardFailure=yes -o UserKnownHostsFile="$work_dir/known_hosts" -o "ProxyJump=mp-ci@$ip_one" -L 19443:example.com:443 "mp-ci@$ip_two"
   echo | openssl s_client -connect 127.0.0.1:19443 -servername example.com -verify_return_error >/dev/null
   ssh -S "$jump_socket" -O exit "mp-ci@$ip_two"
 fi
