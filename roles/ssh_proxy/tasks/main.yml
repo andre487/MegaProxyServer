@@ -113,6 +113,7 @@
       [sshd]
       enabled = true
       backend = systemd
+      action = %(action_)s
       bantime.increment = true
       findtime = 10m
       maxretry = 6

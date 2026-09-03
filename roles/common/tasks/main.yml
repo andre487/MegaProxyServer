@@ -35,3 +35,25 @@
     enabled: true
     state: started
   when: megaproxy_settings.unattended_upgrades | bool
+
+- name: Create journald configuration directory
+  ansible.builtin.file:
+    path: /etc/systemd/journald.conf.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Limit persistent journal disk usage
+  ansible.builtin.copy:
+    dest: /etc/systemd/journald.conf.d/60-megaproxy-limits.conf
+    content: |
+      [Journal]
+      SystemMaxUse=500M
+      SystemMaxFileSize=100M
+      SystemMaxFiles=100
+      SystemKeepFree=100M
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart journald

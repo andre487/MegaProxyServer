@@ -26,6 +26,30 @@
         fail_msg: "HTTPS provisioning is incomplete: /usr/bin/docker is missing. Run './mega-proxy apply'."
       when: megaproxy_services.https is defined and megaproxy_services.https.enabled | bool
   tasks:
+    - name: Validate HAProxy configuration
+      ansible.builtin.command: haproxy -c -f /etc/haproxy/haproxy.cfg
+      changed_when: false
+      when: megaproxy_services.https is defined and megaproxy_services.https.enabled | bool
+
+    - name: Check HAProxy service state
+      ansible.builtin.command: systemctl is-active haproxy
+      register: haproxy_state
+      changed_when: false
+      when: megaproxy_services.https is defined and megaproxy_services.https.enabled | bool
+
+    - name: Read local HTTPS listeners
+      ansible.builtin.command: ss -H -ltn
+      register: https_listeners
+      changed_when: false
+      when: megaproxy_services.https is defined and megaproxy_services.https.enabled | bool
+
+    - name: Require every GOST backend on loopback
+      ansible.builtin.assert:
+        that: "'127.0.0.1:' ~ (item.backend_port | string) in https_listeners.stdout"
+        fail_msg: "GOST backend {{ item.name }} is not listening on loopback port {{ item.backend_port }}"
+      loop: "{{ megaproxy_https_public_routes | default([]) }}"
+      when: megaproxy_services.https is defined and megaproxy_services.https.enabled | bool
+
     - name: Validate sshd configuration
       ansible.builtin.command: sshd -t
       changed_when: false
@@ -63,12 +87,13 @@
             ['curl', '--silent', '--show-error', '--fail', '--http2', '--max-time', '15',
              '--write-out', '\n%{http_code}']
             + (['--insecure'] if megaproxy_services.https.certificate == 'self-signed' else [])
-            + ['https://' ~ megaproxy_services.https.endpoint ~ ':' ~ (megaproxy_services.https.port | string) ~ '/']
+            + ['https://' ~ item.hostname ~ ':' ~ (item.port | string) ~ '/']
           }}
       register: decoy_response
       changed_when: false
       delegate_to: localhost
       become: false
+      loop: "{{ megaproxy_https_public_routes | default([]) }}"
       when:
         - megaproxy_services.https is defined
         - megaproxy_services.https.enabled | bool
@@ -77,12 +102,13 @@
     - name: Ensure decoy does not disclose proxy software
       ansible.builtin.assert:
         that:
-          - decoy_response.rc == 0
-          - decoy_response.stdout.endswith('\n200')
-          - "'proxy-authenticate' not in (decoy_response.stdout | lower)"
-          - "'gost' not in (decoy_response.stdout | lower)"
-          - "'megaproxy' not in (decoy_response.stdout | lower)"
-      when: decoy_response is not skipped
+          - item.rc == 0
+          - item.stdout.endswith('\n200')
+          - "'proxy-authenticate' not in (item.stdout | lower)"
+          - "'gost' not in (item.stdout | lower)"
+          - "'megaproxy' not in (item.stdout | lower)"
+      loop: "{{ decoy_response.results | default([]) }}"
+      when: megaproxy_services.https is defined and megaproxy_services.https.enabled | bool
 
     - name: Probe CONNECT without credentials
       ansible.builtin.command:
@@ -147,3 +173,57 @@
           Authenticated CONNECT was not established. The curl output is hidden because it may
           contain proxy credentials; inspect the GOST service journal for authentication errors.
       when: megaproxy_services.https is defined and megaproxy_services.https.enabled | bool
+
+    - name: Read exit IP through each HTTPS chain entry
+      ansible.builtin.command:
+        argv:
+          - curl
+          - --silent
+          - --show-error
+          - --fail
+          - --max-time
+          - "30"
+          - --proxy-insecure
+          - --proxy-http2
+          - --proxy
+          - "https://{{ item.hostname }}:{{ megaproxy_services.https.port }}"
+          - --proxy-user
+          - "{{ megaproxy_services.https.users[0].name }}:{{ megaproxy_services.https.users[0].password }}"
+          - http://api.ipify.org/
+      loop: "{{ megaproxy_services.get('https', {}).get('routes', []) | selectattr('chain') | list }}"
+      register: chain_entry_ips
+      changed_when: false
+      no_log: true
+      delegate_to: localhost
+      become: false
+
+    - name: Read IP through each direct exit proxy
+      ansible.builtin.command:
+        argv:
+          - curl
+          - --silent
+          - --show-error
+          - --fail
+          - --max-time
+          - "30"
+          - --proxy-insecure
+          - --proxy-http2
+          - --proxy
+          - "https://{{ item.chain.host }}:{{ item.chain.port }}"
+          - --proxy-user
+          - "{{ megaproxy_services.https.users[0].name }}:{{ megaproxy_services.https.users[0].password }}"
+          - http://api.ipify.org/
+      loop: "{{ megaproxy_services.get('https', {}).get('routes', []) | selectattr('chain') | list }}"
+      register: chain_exit_ips
+      changed_when: false
+      no_log: true
+      delegate_to: localhost
+      become: false
+
+    - name: Require chain traffic to use the configured exit
+      ansible.builtin.assert:
+        that:
+          - chain_entry_ips.results[item].stdout | trim == chain_exit_ips.results[item].stdout | trim
+          - chain_entry_ips.results[item].stdout | trim | length > 0
+        fail_msg: "HTTPS chain route did not produce the same public IP as its configured exit"
+      loop: "{{ range(0, chain_entry_ips.results | default([]) | length) | list }}"

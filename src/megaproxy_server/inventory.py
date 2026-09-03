@@ -170,6 +170,10 @@ def ansible_inventory(inventory: Inventory) -> dict[str, Any]:
         if https and https.enabled:
             routes = https_routes(inventory, name)
             services["https"]["routes"] = routes
+            variables_public_routes = [
+                {"name": route["name"], "hostname": route["hostname"], "port": https.port, "backend_port": route["port"]}
+                for route in routes
+            ]
             services["https"]["machine_auth"] = (
                 {"username": https.chain_username, "password": https.chain_password}
                 if inventory.settings.https_chains_enabled and https.chain_exit else None
@@ -182,6 +186,8 @@ def ansible_inventory(inventory: Inventory) -> dict[str, Any]:
             "megaproxy_settings": inventory.settings.model_dump(mode="json"),
             "megaproxy_services": services,
         }
+        if https and https.enabled:
+            variables["megaproxy_https_public_routes"] = variables_public_routes
         variables["ansible_ssh_private_key_file"] = host.admin.private_key_file
         if host.services.https:
             try:
