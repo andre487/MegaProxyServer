@@ -80,6 +80,7 @@ settings:
   https_chain_pairs:
     - entry: entry_eu
       exit: exit_us
+      country_code: US
       hostname: eu-via-us.example.com
       title: EU -> US
 
@@ -124,8 +125,8 @@ hosts:
 - `https_chains_enabled`: включить HTTPS-маршруты entry/exit.
 - `https_chain_domain`: базовый домен автоматически создаваемых chain-имён.
 - `https_chain_backend_port`: первый loopback-порт chain backend-ов.
-- `https_chain_pairs`: необязательный allow-list маршрутов; пара может переопределить `hostname` и
-  `title`.
+- `https_chain_pairs`: необязательный allow-list маршрутов; для каждой объявленной пары обязателен
+  двухбуквенный `country_code` выходного прокси, также пара может переопределить `hostname` и `title`.
 
 При пустом `https_chain_pairs` создаются все совместимые комбинации entry→exit. Непустой список
 ограничивает генерацию явно объявленными парами.

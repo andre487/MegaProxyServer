@@ -89,7 +89,7 @@ def test_chain_pair_title_is_used_in_all_client_formats(tmp_path: Path) -> None:
             https_chains_enabled=True,
             https_chain_domain="chains.example",
             https_chain_pairs=[
-                {"entry": "entry_proxy", "exit": "exit_proxy", "title": "Amsterdam via Turkey"}
+                {"entry": "entry_proxy", "exit": "exit_proxy", "country_code": "TR", "title": "Amsterdam via Turkey"}
             ],
         ),
         hosts={
@@ -106,6 +106,8 @@ def test_chain_pair_title_is_used_in_all_client_formats(tmp_path: Path) -> None:
     megaproxy = json.loads((output / "MegaProxy.json").read_text())
     chain_profile = next(profile for profile in megaproxy["profiles"] if profile["proxy"]["host"].endswith("chains.example"))
     assert chain_profile["name"] == "Amsterdam via Turkey / user-one"
+    assert chain_profile["countryCode"] == "TR"
     foxy = json.loads((output / "FoxyProxy.json").read_text())
     chain_entry = next(entry for entry in foxy["data"] if entry["hostname"].endswith("chains.example"))
     assert chain_entry["title"] == "Amsterdam via Turkey / user-one"
+    assert chain_entry["cc"] == "TR"

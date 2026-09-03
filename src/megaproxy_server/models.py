@@ -132,6 +132,7 @@ class Host(BaseModel):
 class HttpsChainPair(BaseModel):
     entry: str
     exit: str
+    country_code: str = Field(pattern=r"^[A-Z]{2}$")
     hostname: str | None = None
     title: str | None = None
 

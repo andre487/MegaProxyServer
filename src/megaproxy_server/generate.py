@@ -21,7 +21,7 @@ def https_entries(inventory: Inventory) -> list[dict[str, object]]:
         for route in https_routes(inventory, host_name):
             for user in service.users:
                 title = route["title"] if route["name"] != "direct" or service.title else host_name
-                entries.append({"title": f"{title} / {user.name}", "host": route["hostname"], "port": service.port, "username": user.name, "password": user.password})
+                entries.append({"title": f"{title} / {user.name}", "host": route["hostname"], "port": service.port, "username": user.name, "password": user.password, "country_code": route["country_code"]})
     return entries
 
 
@@ -37,7 +37,7 @@ def proxy_url(entry: dict[str, object]) -> str:
 def render_foxy_proxy(entries: list[dict[str, object]]) -> str:
     data = []
     for index, entry in enumerate(entries):
-        data.append({"active": True, "title": entry["title"], "type": "https", "hostname": entry["host"], "port": str(entry["port"]), "username": entry["username"], "password": entry["password"], "cc": "", "city": "", "color": COLORS[index % len(COLORS)], "pac": "", "pacString": "", "proxyDNS": True, "include": [], "exclude": []})
+        data.append({"active": True, "title": entry["title"], "type": "https", "hostname": entry["host"], "port": str(entry["port"]), "username": entry["username"], "password": entry["password"], "cc": entry["country_code"], "city": "", "color": COLORS[index % len(COLORS)], "pac": "", "pacString": "", "proxyDNS": True, "include": [], "exclude": []})
     mode = f"{entries[0]['host']}:{entries[0]['port']}" if entries else "pattern"
     root = {"mode": mode, "sync": False, "autoBackup": False, "passthrough": "", "theme": "", "container": {"incognito": "", "container-1": "", "container-2": "", "container-3": "", "container-4": ""}, "commands": {"setProxy": "", "setTabProxy": "", "quickAdd": ""}, "data": data}
     return json.dumps(root, indent=2) + "\n"

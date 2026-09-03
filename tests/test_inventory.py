@@ -95,7 +95,7 @@ def test_https_sni_routes_are_generated_for_every_exit() -> None:
             https_chains_enabled=True,
             https_chain_domain="chains.example",
             https_chain_pairs=[
-                {"entry": "proxy_ru", "exit": "proxy_nl", "title": "Russia via Netherlands"}
+                {"entry": "proxy_ru", "exit": "proxy_nl", "country_code": "NL", "title": "Russia via Netherlands"}
             ],
         ),
         hosts=hosts,
@@ -112,7 +112,7 @@ def test_https_sni_routes_are_generated_for_every_exit() -> None:
             "name": "proxy_ru_via-proxy_nl",
             "host": "proxy-ru-via-proxy-nl.chains.example",
             "port": 443,
-            "code": "PROXY",
+            "code": "NL",
             "title": "Russia via Netherlands",
         },
         {"name": "proxy_nl", "host": "nl.example", "port": 443, "code": "PROXY", "title": "PROXY Nl"},

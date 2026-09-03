@@ -7,7 +7,7 @@ def sample_inventory() -> Inventory:
     return Inventory(settings=Settings(
         https_chains_enabled=True,
         https_chain_domain="chains.example",
-        https_chain_pairs=[{"entry": "one", "exit": "two", "hostname": "chain.example", "title": "ONE -> TWO"}],
+        https_chain_pairs=[{"entry": "one", "exit": "two", "country_code": "US", "hostname": "chain.example", "title": "ONE -> TWO"}],
     ), hosts={
         "one": Host(address="192.0.2.1", admin=admin, services=Services(
             https=HttpsService(endpoint="proxy.example", title="ONE", certificate="domain", acme_email="a@example.com", users=[HttpsUser(name="alice", password="alice-password-long")], chain_entry=True),

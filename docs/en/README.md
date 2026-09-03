@@ -80,6 +80,7 @@ settings:
   https_chain_pairs:
     - entry: entry_eu
       exit: exit_us
+      country_code: US
       hostname: eu-via-us.example.com
       title: EU -> US
 
@@ -124,7 +125,8 @@ hosts:
 - `https_chains_enabled`: enable HTTPS entry/exit routes.
 - `https_chain_domain`: base domain for automatically generated chain names.
 - `https_chain_backend_port`: first loopback port allocated to chain backends.
-- `https_chain_pairs`: optional route allow-list. Each pair may override `hostname` and `title`.
+- `https_chain_pairs`: optional route allow-list. Every declared pair requires the exit proxy's
+  two-letter `country_code` and may override `hostname` and `title`.
 
 An empty `https_chain_pairs` creates every compatible entry-to-exit combination. A non-empty list
 creates only the declared pairs.
