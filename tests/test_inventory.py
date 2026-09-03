@@ -3,8 +3,8 @@ from pathlib import Path
 import json
 
 from megaproxy_server.export import export_profiles, jump_candidates
-from megaproxy_server.inventory import ansible_inventory, load, save
-from megaproxy_server.models import AdminAccess, Host, Inventory, Services, SshAuthentication, SshService, SshUser
+from megaproxy_server.inventory import ansible_inventory, https_routes, load, save
+from megaproxy_server.models import AdminAccess, Host, HttpsService, HttpsUser, Inventory, Services, Settings, SshAuthentication, SshService, SshUser
 
 
 def ssh_host(address: str, user: str = "mp-proxy") -> Host:
@@ -58,3 +58,17 @@ def test_export_uses_megaproxy_schema_and_dynamic_jump_profiles(tmp_path: Path) 
     assert data["schema"] == "dev.megaproxy.config"
     assert data["version"] == 6
     assert [item["proxy"]["type"] for item in data["profiles"]].count("SSH_JUMP") == 8
+
+
+def test_https_sni_routes_are_generated_for_every_exit() -> None:
+    admin = AdminAccess(user="deploy", private_key_file="/keys/admin", public_key="ssh-ed25519 AAAA admin")
+    user = HttpsUser(name="alice", password="long-password-alice")
+    hosts = {
+        "proxy_ru": Host(address="ru.example", admin=admin, services=Services(https=HttpsService(endpoint="ru.example", certificate="domain", acme_email="a@example.com", users=[user], chain_entry=True))),
+        "proxy_nl": Host(address="nl.example", admin=admin, services=Services(https=HttpsService(endpoint="nl.example", certificate="domain", acme_email="a@example.com", users=[user], chain_exit=True, chain_password="machine-password-long"))),
+    }
+    inventory = Inventory(settings=Settings(https_chains_enabled=True, https_chain_domain="chains.example"), hosts=hosts)
+    routes = https_routes(inventory, "proxy_ru")
+    assert [route["hostname"] for route in routes] == ["ru.example", "proxy-ru-via-proxy-nl.chains.example"]
+    projected = ansible_inventory(inventory)["all"]["hosts"]["proxy_ru"]["megaproxy_services"]["https"]
+    assert projected["routes"][1]["chain"]["host"] == "nl.example"

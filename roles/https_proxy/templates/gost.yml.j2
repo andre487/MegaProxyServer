@@ -1,9 +1,13 @@
 services:
-  - name: web
-    addr: ":{{ megaproxy_services.https.port }}"
+{% for route in megaproxy_services.https.routes %}
+  - name: {{ route.name }}
+    addr: "127.0.0.1:{{ route.port }}"
     handler:
       type: http2
       auther: megaproxy-users
+{% if route.chain %}
+      chain: chain-{{ route.name }}
+{% endif %}
       metadata:
 {% if megaproxy_services.https.probe_resistance.enabled %}
         probeResist: "file:/opt/megaproxy/decoy.html"
@@ -14,15 +18,13 @@ services:
       tls:
         certFile: {{ megaproxy_container_certificate_directory }}/fullchain.pem
         keyFile: {{ megaproxy_container_certificate_directory }}/privkey.pem
-{% if megaproxy_services.https.certificate == 'domain' %}
         rejectUnknownSNI: true
-        serverNames:
-          - {{ megaproxy_services.https.endpoint | to_json }}
-{% endif %}
+        serverNames: [{{ route.hostname | to_json }}]
         options:
           minVersion: VersionTLS12
           maxVersion: VersionTLS13
           alpn: [h2, http/1.1]
+{% endfor %}
 
 authers:
   - name: megaproxy-users
@@ -30,4 +32,25 @@ authers:
 {% for user in megaproxy_services.https.users %}
       - username: {{ user.name | to_json }}
         password: {{ user.password | to_json }}
+{% endfor %}
+{% if megaproxy_services.https.machine_auth %}
+      - username: {{ megaproxy_services.https.machine_auth.username | to_json }}
+        password: {{ megaproxy_services.https.machine_auth.password | to_json }}
+{% endif %}
+
+chains:
+{% for route in megaproxy_services.https.routes if route.chain %}
+  - name: chain-{{ route.name }}
+    hops:
+      - name: exit
+        nodes:
+          - name: {{ route.name }}
+            addr: "{{ route.chain.host }}:{{ route.chain.port }}"
+            connector:
+              type: http2
+              auth:
+                username: {{ route.chain.username | to_json }}
+                password: {{ route.chain.password | to_json }}
+            dialer:
+              type: http2
 {% endfor %}

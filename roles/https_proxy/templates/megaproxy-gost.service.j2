@@ -7,7 +7,7 @@ Wants=network-online.target
 [Service]
 Type=simple
 ExecStartPre=-/usr/bin/docker rm -f megaproxy-gost
-ExecStart=/usr/bin/docker run --name megaproxy-gost --network host --read-only --cap-drop ALL --cap-add NET_BIND_SERVICE --security-opt no-new-privileges --memory 256m --pids-limit 128 -v /opt/megaproxy/gost.yml:/etc/gost/gost.yml:ro -v /opt/megaproxy/decoy.html:/opt/megaproxy/decoy.html:ro -v {{ megaproxy_certificate_volume }} gogost/gost:{{ megaproxy_services.https.gost_version }} -C /etc/gost/gost.yml
+ExecStart=/usr/bin/docker run --name megaproxy-gost --network host --read-only --cap-drop ALL --security-opt no-new-privileges --memory 256m --pids-limit 128 -v /opt/megaproxy/gost.yml:/etc/gost/gost.yml:ro -v /opt/megaproxy/decoy.html:/opt/megaproxy/decoy.html:ro -v {{ megaproxy_certificate_volume }} gogost/gost:{{ megaproxy_services.https.gost_version }} -C /etc/gost/gost.yml
 ExecStop=/usr/bin/docker stop -t 10 megaproxy-gost
 Restart=on-failure
 RestartSec=5

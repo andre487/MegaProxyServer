@@ -7,7 +7,7 @@ from pathlib import Path
 import questionary
 
 from .inventory import DEFAULT_INVENTORY, save
-from .models import AdminAccess, Host, HttpsService, HttpsUser, Inventory, ProbeResistance, Services, SshAuthentication, SshService, SshUser
+from .models import AdminAccess, Host, HttpsService, HttpsUser, Inventory, ProbeResistance, Services, Settings, SshAuthentication, SshService, SshUser
 from .secrets import generate_key, password_hash, public_key, random_password
 
 
@@ -79,6 +79,8 @@ def create_inventory(path: Path = DEFAULT_INVENTORY) -> Inventory:
     hosts: dict[str, Host] = {}
     global_https_users = None
     global_ssh_users = None
+    chains_enabled = bool(questionary.confirm("Enable automatic HTTPS chains between hosts?", default=False).ask())
+    chain_domain = ask_required("Base DNS domain for chain hostnames") if chains_enabled else None
     while True:
         name = ask_required("Inventory host name (for example proxy_eu)")
         address = ask_required("Public IP address or DNS name")
@@ -119,10 +121,21 @@ def create_inventory(path: Path = DEFAULT_INVENTORY) -> Inventory:
             certificate = questionary.select("Certificate type", choices=[questionary.Choice("ACME domain certificate", "domain"), questionary.Choice("ACME public IP certificate", "ip-acme"), questionary.Choice("Self-signed (expert, weaker)", "self-signed")], default="ip-acme" if _is_ip(endpoint) else "domain").ask()
             email = None if certificate == "self-signed" else ask_required("ACME email")
             probe = questionary.confirm("Enable active-probe resistance with a decoy site?", default=True).ask()
+            chain_entry = chains_enabled and bool(questionary.confirm("Use this host as an HTTPS chain entry?", default=True).ask())
+            chain_exit = chains_enabled and bool(questionary.confirm("Use this host as an HTTPS chain exit?", default=True).ask())
             if global_https_users is None:
                 print("These HTTPS users will be configured on every HTTPS-enabled host.")
                 global_https_users = ask_users("HTTPS", "all-hosts")
-            https = HttpsService(endpoint=endpoint, certificate=certificate, acme_email=email, users=global_https_users, probe_resistance=ProbeResistance(enabled=bool(probe), mode="local_decoy" if probe else "disabled"))
+            https = HttpsService(
+                endpoint=endpoint,
+                certificate=certificate,
+                acme_email=email,
+                users=global_https_users,
+                probe_resistance=ProbeResistance(enabled=bool(probe), mode="local_decoy" if probe else "disabled"),
+                chain_entry=chain_entry,
+                chain_exit=chain_exit,
+                chain_password=random_password() if chain_exit else None,
+            )
         if "ssh" in choices:
             if global_ssh_users is None:
                 print("These SSH proxy users will be configured on every SSH-enabled host.")
@@ -144,7 +157,7 @@ def create_inventory(path: Path = DEFAULT_INVENTORY) -> Inventory:
         )
         if not questionary.confirm("Add another host?", default=False).ask():
             break
-    inventory = Inventory(hosts=hosts)
+    inventory = Inventory(settings=Settings(https_chains_enabled=chains_enabled, https_chain_domain=chain_domain), hosts=hosts)
     save(path, inventory, remember_location=True)
     return inventory
 

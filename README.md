@@ -86,6 +86,19 @@ an explicit fallback and require disabling certificate validation in MegaProxy.
 Use a neutral hostname rather than one containing `proxy`, `vpn`, or `gost`. Probe resistance hides
 the proxy role from unauthenticated scans; it cannot hide the IP or prevent IP/SNI-based blocking.
 
+### HTTPS chains and SNI routing
+
+When `settings.https_chains_enabled` is enabled, HTTPS hosts may opt into `chain_entry` and
+`chain_exit`. Every valid directed entry-to-exit pair is generated automatically. HAProxy listens
+on the single public HTTPS port, inspects TLS SNI without terminating TLS, and forwards each name to
+a dedicated loopback GOST listener. For example, `proxy_ru -> proxy_nl` becomes
+`proxy-ru-via-proxy-nl.<https_chain_domain>`; underscores are converted to DNS-safe hyphens.
+
+All generated names must resolve to their entry host before `apply`. Chain hosts require domain
+ACME certificates; Certbot expands the entry certificate to include every generated SNI hostname.
+The exit authenticates entry nodes with a generated machine password that is never included in
+summary or client exports. Client exports expose chain routes as ordinary HTTPS proxies on port 443.
+
 ## SSH
 
 The inventory distinguishes the provider's initial `bootstrap_user` from the permanent administrator.

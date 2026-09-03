@@ -1,0 +1,27 @@
+global
+    log /dev/log local0
+    user haproxy
+    group haproxy
+    daemon
+
+defaults
+    log global
+    mode tcp
+    timeout connect 10s
+    timeout client 5m
+    timeout server 5m
+
+frontend megaproxy_https
+    bind :{{ megaproxy_services.https.port }}
+    tcp-request inspect-delay 5s
+    tcp-request content accept if { req.ssl_hello_type 1 }
+{% for route in megaproxy_services.https.routes %}
+    use_backend {{ route.name }} if { req.ssl_sni -i {{ route.hostname }} }
+{% endfor %}
+    default_backend direct
+
+{% for route in megaproxy_services.https.routes %}
+backend {{ route.name }}
+    server gost 127.0.0.1:{{ route.port }} check
+
+{% endfor %}

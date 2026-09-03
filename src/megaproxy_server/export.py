@@ -5,6 +5,7 @@ import uuid
 from pathlib import Path
 from typing import Any
 
+from .inventory import https_routes
 from .models import Host, Inventory, SshUser
 
 
@@ -78,10 +79,12 @@ def export_profiles(inventory: Inventory, output: Path, include_all_jumps: bool 
     for host_name, host in inventory.hosts.items():
         https = host.services.https
         if https and https.enabled:
-            for user in https.users:
-                name = f"{host_name} / {user.name}"
-                proxy = {"type": "HTTPS", "host": https.endpoint, "port": https.port, "username": user.name, "password": user.password, "allowInvalidProxyCertificate": https.certificate == "self-signed", "sshProfile": "DEFAULT", "trustedHostKey": "", "acceptAnyHostKey": False}
-                profiles.append(_profile(name, proxy, len(profiles)))
+            for route in https_routes(inventory, host_name):
+                for user in https.users:
+                    suffix = "" if route["name"] == "direct" else f" / {route['name']}"
+                    name = f"{host_name}{suffix} / {user.name}"
+                    proxy = {"type": "HTTPS", "host": route["hostname"], "port": https.port, "username": user.name, "password": user.password, "allowInvalidProxyCertificate": https.certificate == "self-signed", "sshProfile": "DEFAULT", "trustedHostKey": "", "acceptAnyHostKey": False}
+                    profiles.append(_profile(name, proxy, len(profiles)))
         if host.services.ssh and host.services.ssh.enabled:
             for user in host.services.ssh.users:
                 name = f"{host_name} / {user.name}"

@@ -44,6 +44,10 @@ class HttpsService(BaseModel):
     certbot_version: str = "v5.4.0"
     users: list[HttpsUser] = Field(min_length=1)
     probe_resistance: ProbeResistance = Field(default_factory=ProbeResistance)
+    chain_entry: bool = False
+    chain_exit: bool = False
+    chain_username: str = "megaproxy-chain"
+    chain_password: str | None = None
 
     @model_validator(mode="after")
     def validate_acme(self) -> HttpsService:
@@ -126,6 +130,15 @@ class Host(BaseModel):
 class Settings(BaseModel):
     manage_firewall: bool = True
     unattended_upgrades: bool = True
+    https_chains_enabled: bool = False
+    https_chain_domain: str | None = None
+    https_chain_backend_port: Port = 10443
+
+    @model_validator(mode="after")
+    def validate_https_chains(self) -> Settings:
+        if self.https_chains_enabled and not self.https_chain_domain:
+            raise ValueError("https_chain_domain is required when HTTPS chains are enabled")
+        return self
 
 
 class ProxyUsers(BaseModel):
@@ -195,4 +208,12 @@ class Inventory(BaseModel):
             raise ValueError("at least one global HTTPS user is required")
         if any(host.services.ssh and host.services.ssh.enabled for host in self.hosts.values()) and not self.users.ssh:
             raise ValueError("at least one global SSH user is required")
+        if self.settings.https_chains_enabled:
+            https_hosts = [host for host in self.hosts.values() if host.services.https and host.services.https.enabled]
+            for host in https_hosts:
+                https = host.services.https
+                if (https.chain_entry or https.chain_exit) and https.certificate != "domain":
+                    raise ValueError("HTTPS chain hosts require domain ACME certificates")
+                if https.chain_exit and not https.chain_password:
+                    raise ValueError("every HTTPS chain exit requires chain_password")
         return self

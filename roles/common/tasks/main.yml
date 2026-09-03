@@ -17,6 +17,7 @@
           'unattended-upgrades'
         ]
         + (['docker.io'] if megaproxy_services.https is defined and megaproxy_services.https.enabled else [])
+        + (['haproxy'] if megaproxy_services.https is defined and megaproxy_services.https.enabled else [])
       }}
     state: present
     lock_timeout: 600

@@ -30,11 +30,31 @@
     megaproxy_certificate_volume: >-
       {{ '/opt/megaproxy/certificates:/certificates:ro' if megaproxy_services.https.certificate == 'self-signed'
          else '/etc/letsencrypt:/etc/letsencrypt:ro' }}
+    megaproxy_certificate_hostnames: "{{ megaproxy_services.https.routes | map(attribute='hostname') | list }}"
 
 - name: Check current certificate
   ansible.builtin.stat:
     path: "{{ megaproxy_certificate_directory }}/fullchain.pem"
   register: megaproxy_certificate
+
+- name: Check certificate hostnames
+  ansible.builtin.command:
+    argv: [openssl, x509, -checkhost, "{{ item }}", -noout, -in, "{{ megaproxy_certificate_directory }}/fullchain.pem"]
+  loop: "{{ megaproxy_certificate_hostnames }}"
+  register: megaproxy_certificate_hostname_checks
+  changed_when: false
+  failed_when: false
+  when:
+    - megaproxy_certificate.stat.exists
+    - megaproxy_services.https.certificate == "domain"
+
+- name: Decide whether the domain certificate must be issued
+  ansible.builtin.set_fact:
+    megaproxy_certificate_needs_issue: >-
+      {{
+        not megaproxy_certificate.stat.exists or
+        (megaproxy_certificate_hostname_checks.results | default([]) | selectattr('rc', 'ne', 0) | list | length > 0)
+      }}
 
 - name: Create self-signed certificate directory
   ansible.builtin.file:
@@ -55,10 +75,18 @@
 
 - name: Obtain domain certificate
   ansible.builtin.command:
-    argv: [docker, run, --rm, --network, host, -v, /etc/letsencrypt:/etc/letsencrypt, -v, /var/lib/letsencrypt:/var/lib/letsencrypt, "certbot/certbot:{{ megaproxy_services.https.certbot_version }}", certonly, --standalone, --non-interactive, --agree-tos, --no-eff-email, --email, "{{ megaproxy_services.https.acme_email }}", --domain, "{{ megaproxy_services.https.endpoint }}"]
+    argv: >-
+      {{
+        ['docker', 'run', '--rm', '--network', 'host', '-v', '/etc/letsencrypt:/etc/letsencrypt',
+         '-v', '/var/lib/letsencrypt:/var/lib/letsencrypt',
+         'certbot/certbot:' ~ megaproxy_services.https.certbot_version,
+         'certonly', '--standalone', '--non-interactive', '--agree-tos', '--no-eff-email', '--expand',
+         '--cert-name', megaproxy_services.https.endpoint, '--email', megaproxy_services.https.acme_email]
+        + (megaproxy_certificate_hostnames | map('regex_replace', '^(.*)$', '--domain=\1') | list)
+      }}
   when:
     - megaproxy_services.https.certificate == "domain"
-    - not megaproxy_certificate.stat.exists
+    - megaproxy_certificate_needs_issue | bool
 
 - name: Obtain public IP certificate
   ansible.builtin.command:
@@ -94,6 +122,19 @@
     group: root
     mode: "0644"
   notify: Restart MegaProxy GOST
+
+- name: Install SNI routing configuration
+  ansible.builtin.template:
+    src: haproxy.cfg.j2
+    dest: /etc/haproxy/haproxy.cfg
+    owner: root
+    group: root
+    mode: "0644"
+    validate: /usr/sbin/haproxy -c -f %s
+  notify: Restart MegaProxy HAProxy
+
+- name: Activate GOST backends before the public SNI router
+  ansible.builtin.meta: flush_handlers
 
 - name: Install containerized certificate renewal service
   ansible.builtin.template:
@@ -140,4 +181,11 @@
     enabled: true
     state: started
     daemon_reload: true
+  when: not ansible_check_mode
+
+- name: Enable HAProxy SNI router
+  ansible.builtin.systemd_service:
+    name: haproxy
+    enabled: true
+    state: started
   when: not ansible_check_mode
