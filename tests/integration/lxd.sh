@@ -97,6 +97,8 @@ if grep -Eq 'changed=[1-9][0-9]*' "$second_run"; then
 fi
 
 control_socket="$work_dir/direct-control"
+printf '%s\n' 'LogLevel DEBUG1' | sudo lxc exec megaproxy-ci-one -- tee /etc/ssh/sshd_config.d/00-ci-debug.conf >/dev/null
+sudo lxc exec megaproxy-ci-one -- systemctl reload ssh
 if ! ssh -vvv -fNT -M -S "$control_socket" -i "$key_file" -o IdentitiesOnly=yes -o ExitOnForwardFailure=yes -o UserKnownHostsFile="$work_dir/known_hosts" -L 18443:example.com:443 "mp-ci@$ip_one"; then
   sudo lxc exec megaproxy-ci-one -- getent passwd mp-ci || true
   sudo lxc exec megaproxy-ci-one -- passwd -S mp-ci || true
