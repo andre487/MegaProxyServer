@@ -37,6 +37,7 @@ class ProbeResistance(BaseModel):
 class HttpsService(BaseModel):
     enabled: bool = True
     endpoint: str
+    title: str | None = None
     port: Port = 443
     certificate: Literal["domain", "ip-acme", "self-signed"] = "domain"
     acme_email: str | None = None
@@ -132,6 +133,7 @@ class HttpsChainPair(BaseModel):
     entry: str
     exit: str
     hostname: str | None = None
+    title: str | None = None
 
 
 class Settings(BaseModel):

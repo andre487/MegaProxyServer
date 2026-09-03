@@ -20,8 +20,8 @@ def https_entries(inventory: Inventory) -> list[dict[str, object]]:
             continue
         for route in https_routes(inventory, host_name):
             for user in service.users:
-                suffix = "" if route["name"] == "direct" else f" / {route['name']}"
-                entries.append({"title": f"{host_name}{suffix} / {user.name}", "host": route["hostname"], "port": service.port, "username": user.name, "password": user.password})
+                title = route["title"] if route["name"] != "direct" or service.title else host_name
+                entries.append({"title": f"{title} / {user.name}", "host": route["hostname"], "port": service.port, "username": user.name, "password": user.password})
     return entries
 
 

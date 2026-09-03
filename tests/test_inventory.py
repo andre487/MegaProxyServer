@@ -90,9 +90,19 @@ def test_https_sni_routes_are_generated_for_every_exit() -> None:
         "proxy_ru": Host(address="ru.example", admin=admin, services=Services(https=HttpsService(endpoint="ru.example", certificate="domain", acme_email="a@example.com", users=[user], chain_entry=True))),
         "proxy_nl": Host(address="nl.example", admin=admin, services=Services(https=HttpsService(endpoint="nl.example", certificate="domain", acme_email="a@example.com", users=[user], chain_exit=True, chain_password="machine-password-long"))),
     }
-    inventory = Inventory(settings=Settings(https_chains_enabled=True, https_chain_domain="chains.example"), hosts=hosts)
+    inventory = Inventory(
+        settings=Settings(
+            https_chains_enabled=True,
+            https_chain_domain="chains.example",
+            https_chain_pairs=[
+                {"entry": "proxy_ru", "exit": "proxy_nl", "title": "Russia via Netherlands"}
+            ],
+        ),
+        hosts=hosts,
+    )
     routes = https_routes(inventory, "proxy_ru")
     assert [route["hostname"] for route in routes] == ["ru.example", "proxy-ru-via-proxy-nl.chains.example"]
+    assert [route["title"] for route in routes] == ["PROXY Ru", "Russia via Netherlands"]
     projected = ansible_inventory(inventory)["all"]["hosts"]["proxy_ru"]["megaproxy_services"]["https"]
     assert projected["routes"][1]["chain"]["host"] == "nl.example"
     public_hosts = ansible_inventory(inventory)["all"]["vars"]["megaproxy_public_https_hosts"]
@@ -103,8 +113,23 @@ def test_https_sni_routes_are_generated_for_every_exit() -> None:
             "host": "proxy-ru-via-proxy-nl.chains.example",
             "port": 443,
             "code": "PROXY",
-            "title": "PROXY Ru",
+            "title": "Russia via Netherlands",
         },
         {"name": "proxy_nl", "host": "nl.example", "port": 443, "code": "PROXY", "title": "PROXY Nl"},
     ]
     assert ansible_inventory(inventory)["all"]["vars"]["megaproxy_users"]["https"][0]["name"] == "alice"
+
+
+def test_https_chain_title_falls_back_to_entry_title() -> None:
+    admin = AdminAccess(user="deploy", private_key_file="/keys/admin", public_key="ssh-ed25519 AAAA admin")
+    user = HttpsUser(name="alice", password="long-password-alice")
+    hosts = {
+        "proxy_ru": Host(address="ru.example", admin=admin, services=Services(https=HttpsService(endpoint="ru.example", title="Russia Entry", certificate="domain", acme_email="a@example.com", users=[user], chain_entry=True))),
+        "proxy_nl": Host(address="nl.example", admin=admin, services=Services(https=HttpsService(endpoint="nl.example", certificate="domain", acme_email="a@example.com", users=[user], chain_exit=True, chain_password="machine-password-long"))),
+    }
+    inventory = Inventory(settings=Settings(https_chains_enabled=True, https_chain_domain="chains.example"), hosts=hosts)
+
+    assert [route["title"] for route in https_routes(inventory, "proxy_ru")] == [
+        "Russia Entry",
+        "Russia Entry",
+    ]

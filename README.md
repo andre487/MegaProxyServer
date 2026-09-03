@@ -111,6 +111,9 @@ All generated names must resolve to their entry host before `apply`. Chain hosts
 ACME certificates; Certbot expands the entry certificate to include every generated SNI hostname.
 The exit authenticates entry nodes with a generated machine password that is never included in
 summary or client exports. Client exports expose chain routes as ordinary HTTPS proxies on port 443.
+An explicit `title` on an `https_chain_pairs` item names that route in client exports and px-manager;
+without it, the entry HTTPS service `title` is used. When the service title is also absent, it is
+derived from the inventory host name.
 
 ## SSH
 

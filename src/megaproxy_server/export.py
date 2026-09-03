@@ -81,8 +81,8 @@ def export_profiles(inventory: Inventory, output: Path, include_all_jumps: bool 
         if https and https.enabled:
             for route in https_routes(inventory, host_name):
                 for user in https.users:
-                    suffix = "" if route["name"] == "direct" else f" / {route['name']}"
-                    name = f"{host_name}{suffix} / {user.name}"
+                    title = route["title"] if route["name"] != "direct" or https.title else host_name
+                    name = f"{title} / {user.name}"
                     proxy = {"type": "HTTPS", "host": route["hostname"], "port": https.port, "username": user.name, "password": user.password, "allowInvalidProxyCertificate": https.certificate == "self-signed", "sshProfile": "DEFAULT", "trustedHostKey": "", "acceptAnyHostKey": False}
                     profiles.append(_profile(name, proxy, len(profiles)))
         if host.services.ssh and host.services.ssh.enabled:
