@@ -1,58 +1,59 @@
 from __future__ import annotations
 
+from typing import Any
+
+from .inventory import https_routes
 from .models import Inventory
 
 
-def render_summary(inventory: Inventory, login: str | None = None) -> str:
-    blocks: list[str] = []
-    for host_name, host in inventory.hosts.items():
-        admin = host.admin
-        if login is None or admin.user == login:
-            blocks.append("\n".join([
-                f"Name: MegaProxy Admin — {host_name} — {admin.user}",
-                "Type: SSH administration",
-                f"Host: {host.address}",
-                f"Port: {admin.port}",
-                f"Login: {admin.user}",
-                "Password: <key authentication>",
-                f"Private key: {admin.private_key_file}",
-                f"URI: ssh://{host.address}:{admin.port}",
-            ]))
-        https = host.services.https
-        if https and https.enabled:
-            for user in https.users:
-                if login is not None and user.name != login:
-                    continue
-                blocks.append("\n".join([
-                    f"Name: MegaProxy HTTPS — {host_name} — {user.name}",
-                    "Type: HTTPS",
-                    f"Host: {https.endpoint}",
-                    f"Port: {https.port}",
-                    f"Login: {user.name}",
-                    f"Password: {user.password}",
-                    f"URI: https://{https.endpoint}:{https.port}",
-                ]))
+def _host_lines(inventory: Inventory) -> list[str]:
+    endpoints: dict[str, dict[str, Any]] = {}
 
+    def add(hostname: str, title: str, service: str) -> None:
+        endpoint = endpoints.setdefault(hostname, {"title": title, "services": []})
+        if service not in endpoint["services"]:
+            endpoint["services"].append(service)
+
+    for host_name, host in inventory.hosts.items():
+        https = host.services.https
+        routes = https_routes(inventory, host_name)
+        direct = next((route for route in routes if route["name"] == "direct"), None)
+        if https and https.enabled and direct:
+            add(direct["hostname"], direct["title"], "HTTPS")
         ssh = host.services.ssh
         if ssh and ssh.enabled:
-            for user in ssh.users:
-                if login is not None and user.name != login:
-                    continue
-                auth = user.authentication
-                lines = [
-                    f"Name: MegaProxy SSH — {host_name} — {user.name}",
-                    "Type: SSH",
-                    f"Host: {host.address}",
-                    f"Port: {ssh.port}",
-                    f"Login: {user.name}",
-                ]
-                if auth.type == "password":
-                    lines.append(f"Password: {auth.password}")
-                else:
-                    lines.extend([
-                        "Password: <key authentication>",
-                        f"Private key: {auth.generated_private_key or '<not stored>'}",
-                    ])
-                lines.append(f"URI: ssh://{host.address}:{ssh.port}")
-                blocks.append("\n".join(lines))
-    return "\n\n".join(blocks) + ("\n" if blocks else "")
+            hostname = https.endpoint if https and https.enabled else host.address
+            title = https.title if https and https.enabled and https.title else host_name
+            add(hostname, title, "SSH")
+        for route in routes:
+            if route["name"] != "direct":
+                add(route["hostname"], route["title"], "HTTPS")
+
+    return [
+        f"{hostname} ({endpoint['title']}, {', '.join(endpoint['services'])})"
+        for hostname, endpoint in endpoints.items()
+    ]
+
+
+def render_summary(inventory: Inventory, login: str | None = None) -> str:
+    https = [
+        f"{user.name}\n{user.password}"
+        for user in inventory.users.https
+        if login is None or user.name == login
+    ]
+    ssh = []
+    for user in inventory.users.ssh:
+        if login is not None and user.name != login:
+            continue
+        auth = user.authentication
+        credential = auth.password if auth.type == "password" else auth.generated_private_key or "<not stored>"
+        ssh.append(f"{user.name}\n{credential}")
+    if not https and not ssh:
+        return ""
+
+    sections = ["Hosts:\n" + "\n".join(_host_lines(inventory))]
+    if https:
+        sections.append("HTTPS:\n" + "\n\n".join(https))
+    if ssh:
+        sections.append("SSH:\n" + "\n\n".join(ssh))
+    return "\n\n".join(sections) + "\n"

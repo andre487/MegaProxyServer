@@ -66,7 +66,7 @@ Useful commands:
 Choose another directory with `configs --output-dir PATH`. Directories use mode `0700` and files
 use mode `0600`. Generation is idempotent and never contacts configured servers.
 
-`summary` prints copy-friendly blocks containing host, port, login, password and URI. With a login
+`summary` prints endpoints once, followed by global HTTPS and SSH credential lists. With a login
 as its first positional argument, only exact matches are shown. Key-only SSH accounts show the
 private-key path instead of a password; administrative accounts are included too. This command deliberately writes plaintext secrets to
 stdout; do not run it in CI or redirect it to an unprotected file.
