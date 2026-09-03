@@ -25,3 +25,6 @@ def test_domain_certificate_detects_openssl_textual_mismatch() -> None:
 
     # OpenSSL 3.0 on the managed host prints a mismatch but exits with rc=0.
     assert "does NOT match certificate" in decision_task
+    # Skipped checks (for example self-signed TLS) have neither rc nor stdout.
+    assert "selectattr('rc', 'defined')" in decision_task
+    assert "selectattr('stdout', 'defined')" in decision_task

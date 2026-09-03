@@ -53,8 +53,8 @@
     megaproxy_certificate_needs_issue: >-
       {{
         not megaproxy_certificate.stat.exists or
-        (megaproxy_certificate_hostname_checks.results | default([]) | selectattr('rc', 'ne', 0) | list | length > 0) or
-        (megaproxy_certificate_hostname_checks.results | default([]) | selectattr('stdout', 'search', 'does NOT match certificate') | list | length > 0)
+        (megaproxy_certificate_hostname_checks.results | default([]) | selectattr('rc', 'defined') | selectattr('rc', 'ne', 0) | list | length > 0) or
+        (megaproxy_certificate_hostname_checks.results | default([]) | selectattr('stdout', 'defined') | selectattr('stdout', 'search', 'does NOT match certificate') | list | length > 0)
       }}
 
 - name: Create self-signed certificate directory
