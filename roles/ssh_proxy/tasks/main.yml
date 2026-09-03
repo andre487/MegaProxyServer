@@ -4,6 +4,13 @@
     that:
       - megaproxy_services.ssh.users | length > 0
 
+- name: Check whether restricted MegaProxy group exists
+  ansible.builtin.command: getent group megaproxy
+  register: megaproxy_group_current
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
 - name: Create restricted MegaProxy group
   ansible.builtin.group:
     name: megaproxy
@@ -34,7 +41,17 @@
     password_lock: "{{ item.authentication.type != 'password' }}"
     update_password: always
   loop: "{{ megaproxy_services.ssh.users }}"
+  when: not ansible_check_mode or megaproxy_group_current.rc == 0
   no_log: true
+
+- name: Explain deferred SSH user planning
+  ansible.builtin.debug:
+    msg: >-
+      SSH proxy user creation is deferred in check mode because the megaproxy group does not exist
+      yet. A normal apply creates the group before these users.
+  when:
+    - ansible_check_mode
+    - megaproxy_group_current.rc != 0
 
 - name: Create root-owned authorized keys directory
   ansible.builtin.file:

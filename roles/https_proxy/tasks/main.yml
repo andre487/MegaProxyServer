@@ -130,7 +130,7 @@
     owner: root
     group: root
     mode: "0644"
-    validate: /usr/sbin/haproxy -c -f %s
+    validate: "{{ omit if ansible_check_mode else '/usr/sbin/haproxy -c -f %s' }}"
   notify: Restart MegaProxy HAProxy
 
 - name: Activate GOST backends before the public SNI router

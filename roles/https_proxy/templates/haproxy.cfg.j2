@@ -18,7 +18,7 @@ frontend megaproxy_https
 {% for route in megaproxy_services.https.routes %}
     use_backend {{ route.name }} if { req.ssl_sni -i {{ route.hostname }} }
 {% endfor %}
-    default_backend direct
+    default_backend {{ megaproxy_services.https.routes[0].name }}
 
 {% for route in megaproxy_services.https.routes %}
 backend {{ route.name }}

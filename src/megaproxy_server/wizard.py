@@ -158,7 +158,7 @@ def create_inventory(path: Path = DEFAULT_INVENTORY) -> Inventory:
         if not questionary.confirm("Add another host?", default=False).ask():
             break
     inventory = Inventory(settings=Settings(https_chains_enabled=chains_enabled, https_chain_domain=chain_domain), hosts=hosts)
-    save(path, inventory, remember_location=True)
+    save(path, inventory, remember_location=True, encrypt=True)
     return inventory
 
 

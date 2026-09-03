@@ -32,6 +32,29 @@ def test_bootstrap_user_is_used_until_promotion() -> None:
     assert projected["megaproxy_admin"]["user"] == "deploy"
 
 
+def test_encrypted_inventory_stays_encrypted_after_save(tmp_path: Path, monkeypatch) -> None:
+    import megaproxy_server.inventory as inventory_module
+
+    password_file = tmp_path / "vault-password"
+    password_file.write_text("test-vault-password\n", encoding="utf-8")
+    monkeypatch.setenv("ANSIBLE_VAULT_PASSWORD_FILE", str(password_file))
+    inventory_module._vault_secret = None
+    path = tmp_path / "inventory.yml"
+    host = ssh_host("192.0.2.1")
+    host.services.ssh.users = [SshUser(name="mp-password", authentication=SshAuthentication(type="password", password="long-password-value", password_hash="$6$long-password-hash"))]
+    source = Inventory(hosts={"one": host})
+    save(path, source, encrypt=True)
+    content = path.read_text(encoding="utf-8")
+    assert not content.startswith("$ANSIBLE_VAULT;")
+    assert "hosts:" in content
+    assert "!vault" in content
+    assert "long-password-value" not in content
+    loaded = load(path)
+    save(path, loaded)
+    assert b"!vault" in path.read_bytes()
+    assert load(path) == source
+
+
 def test_jump_candidates_are_all_directed_host_pairs() -> None:
     inventory = Inventory(hosts={"one": ssh_host("192.0.2.1", "a"), "two": ssh_host("192.0.2.2", "b"), "three": ssh_host("192.0.2.3", "c")})
     chains = jump_candidates(inventory)

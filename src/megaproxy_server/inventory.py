@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import getpass
+import io
 import ipaddress
 import os
 import re
@@ -7,12 +9,19 @@ from pathlib import Path
 from typing import Any
 
 from ruamel.yaml import YAML
+from ansible.constants import DEFAULT_VAULT_ID_MATCH
+from ansible.parsing.vault import VaultLib, VaultSecret
 
 from .models import Inventory
 
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_INVENTORY = Path.cwd() / "inventory.yml"
 POINTER_FILE = Path.cwd() / "inventory-path"
+_vault_secret: VaultSecret | None = None
+
+
+class VaultValue(str):
+    pass
 
 
 def discover(explicit: str | None = None) -> Path | None:
@@ -35,13 +44,26 @@ def remember(path: Path) -> None:
 
 
 def load(path: Path) -> Inventory:
+    content = path.read_bytes()
+    if content.startswith(b"$ANSIBLE_VAULT;"):
+        content = _vault().decrypt(content)
     yaml = YAML(typ="safe")
-    with path.open(encoding="utf-8") as stream:
-        raw: Any = yaml.load(stream)
+    yaml.constructor.add_constructor(
+        "!vault",
+        lambda loader, node: _vault().decrypt(loader.construct_scalar(node).encode()).decode(),
+    )
+    raw: Any = yaml.load(content.decode())
     return Inventory.model_validate(raw)
 
 
-def save(path: Path, inventory: Inventory, *, remember_location: bool = False) -> None:
+def save(
+    path: Path,
+    inventory: Inventory,
+    *,
+    remember_location: bool = False,
+    encrypt: bool | None = None,
+    vault_password: str | None = None,
+) -> None:
     yaml = YAML()
     yaml.indent(mapping=2, sequence=4, offset=2)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -52,11 +74,59 @@ def save(path: Path, inventory: Inventory, *, remember_location: bool = False) -
         if host["services"].get("ssh"):
             host["services"]["ssh"].pop("users", None)
             host["services"]["ssh"].pop("removed_users", None)
-    with path.open("w", encoding="utf-8") as stream:
+    stream = io.StringIO()
+    yaml.dump(data, stream)
+    previous = path.read_bytes() if path.is_file() else b""
+    was_encrypted = previous.startswith(b"$ANSIBLE_VAULT;") or b"!vault" in previous
+    should_encrypt = was_encrypted if encrypt is None else encrypt
+    if should_encrypt:
+        secret = VaultSecret(vault_password.encode()) if vault_password is not None else _vault_secret_value()
+        vault = VaultLib([(DEFAULT_VAULT_ID_MATCH, secret)])
+        _encrypt_secret_fields(data, vault, secret)
+        stream = io.StringIO()
+        yaml.representer.add_representer(
+            VaultValue,
+            lambda representer, value: representer.represent_scalar("!vault", str(value), style="|"),
+        )
         yaml.dump(data, stream)
+    path.write_text(stream.getvalue(), encoding="utf-8")
     os.chmod(path, 0o600)
     if remember_location:
         remember(path)
+
+
+def _vault_secret_value() -> VaultSecret:
+    global _vault_secret
+    if _vault_secret is not None:
+        return _vault_secret
+    password_file = os.environ.get("ANSIBLE_VAULT_PASSWORD_FILE")
+    if password_file:
+        password = Path(password_file).expanduser().read_text(encoding="utf-8").strip()
+    else:
+        password = getpass.getpass("Ansible Vault password: ")
+    _vault_secret = VaultSecret(password.encode())
+    return _vault_secret
+
+
+def _vault() -> VaultLib:
+    return VaultLib([(DEFAULT_VAULT_ID_MATCH, _vault_secret_value())])
+
+
+def _encrypt_secret_fields(data: dict[str, Any], vault: VaultLib, secret: VaultSecret) -> None:
+    def encrypted(value: str) -> VaultValue:
+        return VaultValue(vault.encrypt(value, secret).decode())
+
+    for user in data.get("users", {}).get("https", []):
+        user["password"] = encrypted(user["password"])
+    for user in data.get("users", {}).get("ssh", []):
+        authentication = user["authentication"]
+        for key in ("password", "password_hash"):
+            if authentication.get(key):
+                authentication[key] = encrypted(authentication[key])
+    for host in data.get("hosts", {}).values():
+        https = host.get("services", {}).get("https")
+        if https and https.get("chain_password"):
+            https["chain_password"] = encrypted(https["chain_password"])
 
 
 def https_routes(inventory: Inventory, name: str) -> list[dict[str, Any]]:
@@ -64,19 +134,23 @@ def https_routes(inventory: Inventory, name: str) -> list[dict[str, Any]]:
     https = host.services.https
     if not https or not https.enabled:
         return []
-    routes: list[dict[str, Any]] = [
-        {"name": "direct", "hostname": https.endpoint, "port": inventory.settings.https_chain_backend_port, "chain": None}
-    ]
+    routes: list[dict[str, Any]] = []
+    if https.direct:
+        routes.append({"name": "direct", "hostname": https.endpoint, "port": inventory.settings.https_chain_backend_port, "chain": None})
     if inventory.settings.https_chains_enabled and https.chain_entry:
+        configured_pairs = [pair for pair in inventory.settings.https_chain_pairs if pair.entry == name]
+        allowed_exits = {pair.exit for pair in configured_pairs} if inventory.settings.https_chain_pairs else None
+        pair_hostnames = {pair.exit: pair.hostname for pair in configured_pairs}
         exits = [
             (exit_name, exit_host.services.https)
             for exit_name, exit_host in sorted(inventory.hosts.items())
             if exit_name != name and exit_host.services.https and exit_host.services.https.enabled and exit_host.services.https.chain_exit
+            and (allowed_exits is None or exit_name in allowed_exits)
         ]
-        for index, (exit_name, exit_https) in enumerate(exits, start=1):
+        for index, (exit_name, exit_https) in enumerate(exits, start=len(routes)):
             routes.append({
                 "name": f"via-{exit_name}",
-                "hostname": f"{_dns_label(name)}-via-{_dns_label(exit_name)}.{inventory.settings.https_chain_domain}",
+                "hostname": pair_hostnames.get(exit_name) or f"{_dns_label(name)}-via-{_dns_label(exit_name)}.{inventory.settings.https_chain_domain}",
                 "port": inventory.settings.https_chain_backend_port + index,
                 "chain": {"host": exit_https.endpoint, "port": exit_https.port, "username": exit_https.chain_username, "password": exit_https.chain_password},
             })

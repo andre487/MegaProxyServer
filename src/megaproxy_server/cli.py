@@ -36,6 +36,7 @@ def parser() -> argparse.ArgumentParser:
     summary = sub.add_parser("summary", help="Print credentials for a password manager")
     summary.add_argument("login", nargs="?", help="Show only this login")
     sub.add_parser("remove-users", help="Remove one or more proxy user accounts")
+    sub.add_parser("vault-secrets", help="Encrypt only secret inventory fields with Ansible Vault")
     sub.add_parser("jumps", help="List all possible SSH jump chains")
     return result
 
@@ -95,7 +96,7 @@ def finish_bootstrap(path: Path, inventory, limit: str | None) -> None:
 
 
 def interactive_command() -> str:
-    value = questionary.select("MegaProxy Server", choices=[questionary.Choice("Validate configuration", "validate"), questionary.Choice("Plan changes", "plan"), questionary.Choice("Apply configuration", "apply"), questionary.Choice("Verify configured servers (after apply)", "verify"), questionary.Choice("Remove proxy users", "remove-users"), questionary.Choice("Show credential summary", "summary"), questionary.Choice("Generate all client configuration formats", "configs"), questionary.Choice("Export MegaProxy profiles", "export"), questionary.Choice("List possible SSH jump chains", "jumps")]).ask()
+    value = questionary.select("MegaProxy Server", choices=[questionary.Choice("Validate configuration", "validate"), questionary.Choice("Plan changes", "plan"), questionary.Choice("Apply configuration", "apply"), questionary.Choice("Verify configured servers (after apply)", "verify"), questionary.Choice("Encrypt inventory secrets with Ansible Vault", "vault-secrets"), questionary.Choice("Remove proxy users", "remove-users"), questionary.Choice("Show credential summary", "summary"), questionary.Choice("Generate all client configuration formats", "configs"), questionary.Choice("Export MegaProxy profiles", "export"), questionary.Choice("List possible SSH jump chains", "jumps")]).ask()
     if value is None:
         raise KeyboardInterrupt
     return value
@@ -140,6 +141,10 @@ def main() -> None:
             return
         command = args.command or interactive_command()
         inventory = load(path)
+        if command == "vault-secrets":
+            save(path, inventory, encrypt=True)
+            print(f"Encrypted secret fields in {path}")
+            return
         if command == "remove-users":
             candidates = active_users(inventory)
             if not candidates:

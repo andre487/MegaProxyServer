@@ -46,6 +46,7 @@ class HttpsService(BaseModel):
     probe_resistance: ProbeResistance = Field(default_factory=ProbeResistance)
     chain_entry: bool = False
     chain_exit: bool = False
+    direct: bool = True
     chain_username: str = "megaproxy-chain"
     chain_password: str | None = None
 
@@ -127,12 +128,19 @@ class Host(BaseModel):
         return self
 
 
+class HttpsChainPair(BaseModel):
+    entry: str
+    exit: str
+    hostname: str | None = None
+
+
 class Settings(BaseModel):
     manage_firewall: bool = True
     unattended_upgrades: bool = True
     https_chains_enabled: bool = False
     https_chain_domain: str | None = None
     https_chain_backend_port: Port = 10443
+    https_chain_pairs: list[HttpsChainPair] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def validate_https_chains(self) -> Settings:
@@ -216,4 +224,15 @@ class Inventory(BaseModel):
                     raise ValueError("HTTPS chain hosts require domain ACME certificates")
                 if https.chain_exit and not https.chain_password:
                     raise ValueError("every HTTPS chain exit requires chain_password")
+            for pair in self.settings.https_chain_pairs:
+                if pair.entry == pair.exit:
+                    raise ValueError("HTTPS chain entry and exit must differ")
+                if pair.entry not in self.hosts or pair.exit not in self.hosts:
+                    raise ValueError(f"unknown host in HTTPS chain pair {pair.entry!r} -> {pair.exit!r}")
+                entry = self.hosts[pair.entry].services.https
+                exit_service = self.hosts[pair.exit].services.https
+                if not entry or not entry.enabled or not entry.chain_entry:
+                    raise ValueError(f"HTTPS chain entry {pair.entry!r} is not enabled as an entry")
+                if not exit_service or not exit_service.enabled or not exit_service.chain_exit:
+                    raise ValueError(f"HTTPS chain exit {pair.exit!r} is not enabled as an exit")
         return self

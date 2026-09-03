@@ -108,7 +108,11 @@
 
     - name: Ensure an active probe does not receive a proxy challenge
       ansible.builtin.assert:
-        that: "'407' not in unauthenticated_connect.stderr"
+        that:
+          - "'response 407' not in (unauthenticated_connect.stderr | lower)"
+          - "'http/1.1 407' not in (unauthenticated_connect.stderr | lower)"
+          - "'http/2 407' not in (unauthenticated_connect.stderr | lower)"
+        fail_msg: "The unauthenticated probe received an actual HTTP 407 proxy challenge"
       when: unauthenticated_connect is not skipped
 
     - name: Probe authenticated HTTPS CONNECT

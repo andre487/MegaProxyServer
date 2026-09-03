@@ -32,6 +32,13 @@ When no inventory exists, the launcher offers to create `inventory.yml` in the c
 or use another path. An external path is remembered in `inventory-path`. Both files, generated
 profiles and generated keys are excluded by `.gitignore`.
 
+`vault-secrets` encrypts password fields with tagged inline Ansible Vault values while keeping
+hosts, ports, domains and flags editable as ordinary YAML. `mega-proxy` prompts for the Vault
+password when it encounters the first encrypted value. For unattended runs, set
+`ANSIBLE_VAULT_PASSWORD_FILE` to a protected password file. Subsequent inventory updates preserve
+field-level encryption. Whole-file Ansible Vault inventories remain readable and are converted to
+field-level encryption by `vault-secrets`.
+
 Useful commands:
 
 ```shell
