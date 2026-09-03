@@ -91,7 +91,7 @@ def export_profiles(inventory: Inventory, output: Path, include_all_jumps: bool 
                 profiles.append(_profile(name, _ssh_proxy(host_name, host, user), len(profiles)))
     if include_all_jumps:
         profiles.extend(_jump_profiles(inventory, len(profiles)))
-    result = {"schema": "dev.megaproxy.config", "version": 6, "passwordsIncluded": True, "privateKeysIncluded": True, "diagnosticLogLimitMb": 3, "tls": {"fingerprint": "DEFAULT", "customJa3": ""}, "ssh": {"fingerprint": "DEFAULT", "authMode": "AUTO", "keepaliveSeconds": 30, "maxChannels": 32, "rotationMinutes": 0, "rotationMb": 0}, "failover": {"mode": "DISABLED", "profileIds": []}, "routing": {"routeAllApps": True, "selectedPackages": [], "bypassLocalNetworks": True}, "profiles": profiles}
+    result = {"schema": "net.megaproxy487.config", "version": 7, "passwordsIncluded": True, "privateKeysIncluded": True, "diagnosticLogLimitMb": 3, "tls": {"fingerprint": "DEFAULT", "customJa3": ""}, "ssh": {"fingerprint": "DEFAULT", "authMode": "AUTO", "keepaliveSeconds": 30, "maxChannels": 32, "rotationMinutes": 0, "rotationMb": 0}, "failover": {"mode": "DISABLED", "profileIds": []}, "routing": {"routeAllApps": True, "selectedPackages": [], "bypassLocalNetworks": True}, "profiles": profiles}
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
     output.chmod(0o600)

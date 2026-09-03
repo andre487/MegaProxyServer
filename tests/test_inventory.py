@@ -78,8 +78,8 @@ def test_export_uses_megaproxy_schema_and_dynamic_jump_profiles(tmp_path: Path) 
     output = tmp_path / "profiles.json"
     export_profiles(inventory, output, include_all_jumps=True)
     data = json.loads(output.read_text())
-    assert data["schema"] == "dev.megaproxy.config"
-    assert data["version"] == 6
+    assert data["schema"] == "net.megaproxy487.config"
+    assert data["version"] == 7
     assert [item["proxy"]["type"] for item in data["profiles"]].count("SSH_JUMP") == 8
 
 

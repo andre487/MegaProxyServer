@@ -48,7 +48,8 @@ def test_generated_formats_contain_https_credentials(tmp_path: Path) -> None:
     generate(source, output)
 
     megaproxy = json.loads((output / "MegaProxy.json").read_text())
-    assert megaproxy["schema"] == "dev.megaproxy.config"
+    assert megaproxy["schema"] == "net.megaproxy487.config"
+    assert megaproxy["version"] == 7
     assert megaproxy["profiles"][0]["proxy"]["type"] == "HTTPS"
 
     foxy = json.loads((output / "FoxyProxy.json").read_text())
