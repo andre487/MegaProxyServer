@@ -26,6 +26,7 @@ hosts:
       https:
         enabled: true
         endpoint: example.com
+        title: EU
         port: 443
         certificate: domain
         acme_email: admin@example.com
