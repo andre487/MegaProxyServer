@@ -101,6 +101,8 @@ if ! ssh -vvv -fNT -M -S "$control_socket" -i "$key_file" -o IdentitiesOnly=yes 
   sudo lxc exec megaproxy-ci-one -- getent passwd mp-ci || true
   sudo lxc exec megaproxy-ci-one -- passwd -S mp-ci || true
   sudo lxc exec megaproxy-ci-one -- namei -l /etc/ssh/megaproxy_authorized_keys/mp-ci || true
+  ssh-keygen -lf "$key_file.pub" || true
+  sudo lxc exec megaproxy-ci-one -- ssh-keygen -lf /etc/ssh/megaproxy_authorized_keys/mp-ci || true
   sudo lxc exec megaproxy-ci-one -- sh -c "sshd -T -C user=mp-ci,host=localhost,addr=127.0.0.1 | grep -E 'authorizedkeysfile|authenticationmethods|pubkeyauthentication|allowtcpforwarding|maxsessions'" || true
   exit 1
 fi
