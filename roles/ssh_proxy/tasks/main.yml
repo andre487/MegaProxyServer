@@ -66,7 +66,7 @@
 - name: Install restricted authorized keys
   ansible.builtin.copy:
     dest: "/etc/ssh/megaproxy_authorized_keys/{{ item.name }}"
-    content: "restrict,port-forwarding {{ item.authentication.public_key }}\n"
+    content: "{{ item.authentication.public_key }}\n"
     owner: root
     group: root
     mode: "0644"

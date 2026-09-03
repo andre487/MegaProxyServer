@@ -12,3 +12,13 @@ def test_key_only_account_is_not_locked_before_public_key_authentication() -> No
 
     assert "else 'x'" in user_task
     assert "password_lock: false" in user_task
+
+
+def test_authorized_key_relies_on_the_restricted_sshd_match_block() -> None:
+    tasks = (ROOT / "roles" / "ssh_proxy" / "tasks" / "main.yml").read_text(encoding="utf-8")
+    key_task = tasks.split("- name: Install restricted authorized keys", 1)[1].split(
+        "- name: Remove key files for password-only users", 1
+    )[0]
+
+    assert 'content: "{{ item.authentication.public_key }}\\n"' in key_task
+    assert "restrict,port-forwarding" not in key_task
