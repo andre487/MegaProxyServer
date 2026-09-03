@@ -8,6 +8,10 @@ key_file="$work_dir/ci_ed25519"
 inventory_file="$work_dir/inventory.yml"
 instances=()
 
+# LXD guests need forwarding through the managed bridge. Some GitHub runner images default to DROP.
+sudo iptables -P FORWARD ACCEPT
+sudo ip6tables -P FORWARD ACCEPT
+
 cleanup() {
   for instance in "${instances[@]}"; do
     sudo lxc delete --force "$instance" >/dev/null 2>&1 || true
@@ -36,7 +40,7 @@ launch_host() {
   # GitHub-hosted runners may block plain HTTP from nested LXD guests.
   sudo lxc exec "$name" -- sh -c \
     "sed -i 's|http://|https://|g' /etc/apt/sources.list 2>/dev/null || true; sed -i 's|http://|https://|g' /etc/apt/sources.list.d/*.sources 2>/dev/null || true"
-  sudo lxc exec "$name" -- apt-get update
+  sudo lxc exec "$name" -- apt-get update -o APT::Update::Error-Mode=any
   sudo lxc exec "$name" -- env DEBIAN_FRONTEND=noninteractive apt-get install -y python3 openssh-server sudo curl
   sudo lxc exec "$name" -- install -d -m 0700 /root/.ssh
   printf '%s\n' "$public_key" | sudo lxc exec "$name" -- tee /root/.ssh/authorized_keys >/dev/null
