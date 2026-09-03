@@ -97,7 +97,13 @@ if grep -Eq 'changed=[1-9][0-9]*' "$second_run"; then
 fi
 
 control_socket="$work_dir/direct-control"
-ssh -fNT -M -S "$control_socket" -i "$key_file" -o IdentitiesOnly=yes -o ExitOnForwardFailure=yes -o UserKnownHostsFile="$work_dir/known_hosts" -L 18443:example.com:443 "mp-ci@$ip_one"
+if ! ssh -vvv -fNT -M -S "$control_socket" -i "$key_file" -o IdentitiesOnly=yes -o ExitOnForwardFailure=yes -o UserKnownHostsFile="$work_dir/known_hosts" -L 18443:example.com:443 "mp-ci@$ip_one"; then
+  sudo lxc exec megaproxy-ci-one -- getent passwd mp-ci || true
+  sudo lxc exec megaproxy-ci-one -- passwd -S mp-ci || true
+  sudo lxc exec megaproxy-ci-one -- namei -l /etc/ssh/megaproxy_authorized_keys/mp-ci || true
+  sudo lxc exec megaproxy-ci-one -- sh -c "sshd -T -C user=mp-ci,host=localhost,addr=127.0.0.1 | grep -E 'authorizedkeysfile|authenticationmethods|pubkeyauthentication|allowtcpforwarding|maxsessions'" || true
+  exit 1
+fi
 echo | openssl s_client -connect 127.0.0.1:18443 -servername example.com -verify_return_error >/dev/null
 ssh -S "$control_socket" -O exit "mp-ci@$ip_one"
 
