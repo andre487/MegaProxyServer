@@ -37,8 +37,10 @@
     append: false
     create_home: false
     shell: /usr/sbin/nologin
-    password: "{{ item.authentication.password_hash | default('!') }}"
-    password_lock: "{{ item.authentication.type != 'password' }}"
+    # A leading ! or * marks the whole account as locked, so OpenSSH rejects public keys too.
+    # "x" is not a usable crypt hash but leaves key-only accounts eligible for public-key auth.
+    password: "{{ item.authentication.password_hash if item.authentication.type == 'password' else 'x' }}"
+    password_lock: false
     update_password: always
   loop: "{{ megaproxy_services.ssh.users }}"
   when: not ansible_check_mode or megaproxy_group_current.rc == 0
