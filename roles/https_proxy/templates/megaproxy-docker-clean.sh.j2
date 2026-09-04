@@ -12,7 +12,7 @@ cleanup_old_images() {
     xargs -r docker image rm
 }
 
-gost_image_id="$(docker inspect --format '{{ '{{' }}.Image{{ '}}' }}' megaproxy-gost)"
+gost_image_id="$(docker inspect --format '{{ '{{' }}.Image{{ '}}' }}' megaproxy-gost 2>/dev/null || true)"
 certbot_image_id="$(docker image inspect --format '{{ '{{' }}.Id{{ '}}' }}' 'certbot/certbot:{{ megaproxy_services.https.certbot_version }}' 2>/dev/null || true)"
 
 cleanup_old_images gogost/gost "$gost_image_id"

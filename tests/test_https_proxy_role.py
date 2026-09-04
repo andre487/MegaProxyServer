@@ -79,6 +79,7 @@ def test_docker_cleanup_runs_after_docker_service_changes() -> None:
     assert "Clean MegaProxy Docker resources" in service_task
     assert "/usr/local/sbin/megaproxy-docker-clean" in handlers
     assert 'gost_image_id="$(docker inspect' in cleanup
+    assert "megaproxy-gost 2>/dev/null || true" in cleanup
     assert "cleanup_old_images gogost/gost" in cleanup
     assert "cleanup_old_images certbot/certbot" in cleanup
     assert "megaproxy_services.https.certbot_version" in cleanup
