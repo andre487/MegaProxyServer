@@ -1,0 +1,23 @@
+#!/bin/sh
+set -eu
+
+cleanup_old_images() {
+  repository="$1"
+  keep_image_id="$2"
+
+  [ -n "$keep_image_id" ] || return 0
+  docker image ls --no-trunc --format '{{ '{{' }}.ID{{ '}}' }} {{ '{{' }}.Repository{{ '}}' }}' |
+    awk -v repository="$repository" -v keep="$keep_image_id" \
+      '$2 == repository && $1 != keep { print $1 }' |
+    xargs -r docker image rm
+}
+
+gost_image_id="$(docker inspect --format '{{ '{{' }}.Image{{ '}}' }}' megaproxy-gost)"
+certbot_image_id="$(docker image inspect --format '{{ '{{' }}.Id{{ '}}' }}' 'certbot/certbot:{{ megaproxy_services.https.certbot_version }}' 2>/dev/null || true)"
+
+cleanup_old_images gogost/gost "$gost_image_id"
+cleanup_old_images certbot/certbot "$certbot_image_id"
+
+docker image prune --force
+docker volume prune --force
+docker network prune --force

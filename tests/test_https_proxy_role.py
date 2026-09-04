@@ -59,3 +59,29 @@ def test_https_proxy_uses_http2() -> None:
 
     verify = (ROOT / "playbooks" / "verify.yml").read_text(encoding="utf-8")
     assert "--proxy-http2" not in verify
+
+
+def test_docker_cleanup_runs_after_docker_service_changes() -> None:
+    tasks = (ROOT / "roles" / "https_proxy" / "tasks" / "main.yml").read_text(
+        encoding="utf-8"
+    )
+    handlers = (ROOT / "roles" / "https_proxy" / "handlers" / "main.yml").read_text(
+        encoding="utf-8"
+    )
+    cleanup = (ROOT / "roles" / "https_proxy" / "templates" / "megaproxy-docker-clean.sh.j2").read_text(
+        encoding="utf-8"
+    )
+
+    service_task = tasks.split("- name: Install GOST systemd service", 1)[1].split(
+        "- name: Install Docker cleanup helper", 1
+    )[0]
+    assert "Restart MegaProxy GOST" in service_task
+    assert "Clean MegaProxy Docker resources" in service_task
+    assert "/usr/local/sbin/megaproxy-docker-clean" in handlers
+    assert 'gost_image_id="$(docker inspect' in cleanup
+    assert "cleanup_old_images gogost/gost" in cleanup
+    assert "cleanup_old_images certbot/certbot" in cleanup
+    assert "megaproxy_services.https.certbot_version" in cleanup
+    assert "docker image prune --force" in cleanup
+    assert "docker volume prune --force" in cleanup
+    assert "docker network prune --force" in cleanup

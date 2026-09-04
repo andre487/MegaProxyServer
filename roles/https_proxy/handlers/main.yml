@@ -11,3 +11,12 @@
     name: haproxy
     state: restarted
   when: not ansible_check_mode
+
+- name: Clean MegaProxy Docker resources
+  ansible.builtin.command: /usr/local/sbin/megaproxy-docker-clean
+  register: megaproxy_docker_cleanup
+  changed_when: >-
+    'Deleted:' in megaproxy_docker_cleanup.stdout or
+    'deleted:' in megaproxy_docker_cleanup.stdout or
+    'Untagged:' in megaproxy_docker_cleanup.stdout
+  when: not ansible_check_mode

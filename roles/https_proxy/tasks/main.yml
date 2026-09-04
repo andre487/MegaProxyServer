@@ -122,7 +122,18 @@
     owner: root
     group: root
     mode: "0644"
-  notify: Restart MegaProxy GOST
+  notify:
+    - Restart MegaProxy GOST
+    - Clean MegaProxy Docker resources
+
+- name: Install Docker cleanup helper
+  ansible.builtin.template:
+    src: megaproxy-docker-clean.sh.j2
+    dest: /usr/local/sbin/megaproxy-docker-clean
+    owner: root
+    group: root
+    mode: "0755"
+  notify: Clean MegaProxy Docker resources
 
 - name: Install SNI routing configuration
   ansible.builtin.template:
@@ -163,6 +174,7 @@
     owner: root
     group: root
     mode: "0644"
+  notify: Clean MegaProxy Docker resources
   when: megaproxy_services.https.certificate != "self-signed"
 
 - name: Install certificate renewal timer
