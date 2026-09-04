@@ -56,6 +56,7 @@ def test_https_proxy_uses_http2() -> None:
 
     assert "type: http2" in template
     assert "alpn: [h2, http/1.1]" in template
+    assert "rejectUnknownSNI: {{ (not route.is_ip) | lower }}" in template
 
     verify = (ROOT / "playbooks" / "verify.yml").read_text(encoding="utf-8")
     assert "--proxy-http2" not in verify

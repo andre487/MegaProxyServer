@@ -102,6 +102,7 @@ def test_https_sni_routes_are_generated_for_every_exit() -> None:
     )
     routes = https_routes(inventory, "proxy_ru")
     assert [route["hostname"] for route in routes] == ["ru.example", "proxy-ru-via-proxy-nl.chains.example"]
+    assert [route["is_ip"] for route in routes] == [False, False]
     assert [route["title"] for route in routes] == ["PROXY Ru", "Russia via Netherlands"]
     projected = ansible_inventory(inventory)["all"]["hosts"]["proxy_ru"]["megaproxy_services"]["https"]
     assert projected["routes"][1]["chain"]["host"] == "nl.example"
@@ -118,6 +119,28 @@ def test_https_sni_routes_are_generated_for_every_exit() -> None:
         {"name": "proxy_nl", "host": "nl.example", "port": 443, "code": "PROXY", "title": "PROXY Nl"},
     ]
     assert ansible_inventory(inventory)["all"]["vars"]["megaproxy_users"]["https"][0]["name"] == "alice"
+
+
+def test_ip_https_route_allows_clients_without_sni() -> None:
+    admin = AdminAccess(user="deploy", private_key_file="/keys/admin", public_key="ssh-ed25519 AAAA admin")
+    user = HttpsUser(name="alice", password="long-password-alice")
+    inventory = Inventory(
+        hosts={
+            "proxy_us": Host(
+                address="192.0.2.1",
+                admin=admin,
+                services=Services(
+                    https=HttpsService(
+                        endpoint="192.0.2.1",
+                        certificate="self-signed",
+                        users=[user],
+                    )
+                ),
+            )
+        }
+    )
+
+    assert https_routes(inventory, "proxy_us")[0]["is_ip"] is True
 
 
 def test_route_probe_override_is_independent() -> None:

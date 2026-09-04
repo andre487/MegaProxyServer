@@ -21,7 +21,7 @@ services:
       tls:
         certFile: {{ megaproxy_container_certificate_directory }}/fullchain.pem
         keyFile: {{ megaproxy_container_certificate_directory }}/privkey.pem
-        rejectUnknownSNI: true
+        rejectUnknownSNI: {{ (not route.is_ip) | lower }}
         serverNames: [{{ route.hostname | to_json }}]
         options:
           minVersion: VersionTLS12

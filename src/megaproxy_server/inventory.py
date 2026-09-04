@@ -137,7 +137,7 @@ def https_routes(inventory: Inventory, name: str) -> list[dict[str, Any]]:
     routes: list[dict[str, Any]] = []
     entry_title = https.title or _host_title(name)
     if https.direct:
-        routes.append({"name": "direct", "hostname": https.endpoint, "title": entry_title, "country_code": name.split("_", 1)[0].upper(), "port": inventory.settings.https_chain_backend_port, "chain": None, "probe_resistance": https.probe_resistance.model_dump(mode="json")})
+        routes.append({"name": "direct", "hostname": https.endpoint, "is_ip": _is_ip(https.endpoint), "title": entry_title, "country_code": name.split("_", 1)[0].upper(), "port": inventory.settings.https_chain_backend_port, "chain": None, "probe_resistance": https.probe_resistance.model_dump(mode="json")})
     if inventory.settings.https_chains_enabled and https.chain_entry:
         configured_pairs = [pair for pair in inventory.settings.https_chain_pairs if pair.entry == name]
         allowed_exits = {pair.exit for pair in configured_pairs} if inventory.settings.https_chain_pairs else None
@@ -153,9 +153,11 @@ def https_routes(inventory: Inventory, name: str) -> list[dict[str, Any]]:
         ]
         for index, (exit_name, exit_https) in enumerate(exits, start=len(routes)):
             probe_resistance = pair_probe_resistance.get(exit_name) or https.probe_resistance
+            route_hostname = pair_hostnames.get(exit_name) or f"{_dns_label(name)}-via-{_dns_label(exit_name)}.{inventory.settings.https_chain_domain}"
             routes.append({
                 "name": f"via-{exit_name}",
-                "hostname": pair_hostnames.get(exit_name) or f"{_dns_label(name)}-via-{_dns_label(exit_name)}.{inventory.settings.https_chain_domain}",
+                "hostname": route_hostname,
+                "is_ip": _is_ip(route_hostname),
                 "title": pair_titles.get(exit_name) or entry_title,
                 "country_code": pair_country_codes.get(exit_name) or exit_name.split("_", 1)[0].upper(),
                 "port": inventory.settings.https_chain_backend_port + index,
@@ -167,6 +169,14 @@ def https_routes(inventory: Inventory, name: str) -> list[dict[str, Any]]:
 
 def _dns_label(value: str) -> str:
     return re.sub(r"[^a-z0-9-]+", "-", value.lower()).strip("-")
+
+
+def _is_ip(value: str) -> bool:
+    try:
+        ipaddress.ip_address(value)
+    except ValueError:
+        return False
+    return True
 
 
 def _host_title(name: str) -> str:
