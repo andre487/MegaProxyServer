@@ -120,7 +120,7 @@ def create_inventory(path: Path = DEFAULT_INVENTORY) -> Inventory:
             endpoint = ask_required("HTTPS endpoint", address)
             certificate = questionary.select("Certificate type", choices=[questionary.Choice("ACME domain certificate", "domain"), questionary.Choice("ACME public IP certificate", "ip-acme"), questionary.Choice("Self-signed (expert, weaker)", "self-signed")], default="ip-acme" if _is_ip(endpoint) else "domain").ask()
             email = None if certificate == "self-signed" else ask_required("ACME email")
-            probe = questionary.confirm("Enable active-probe resistance with a decoy site?", default=True).ask()
+            probe = questionary.confirm("Enable active-probe resistance? This may break browser proxy authentication.", default=False).ask()
             chain_entry = chains_enabled and bool(questionary.confirm("Use this host as an HTTPS chain entry?", default=True).ask())
             chain_exit = chains_enabled and bool(questionary.confirm("Use this host as an HTTPS chain exit?", default=True).ask())
             if global_https_users is None:

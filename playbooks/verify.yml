@@ -84,7 +84,7 @@
       ansible.builtin.command:
         argv: >-
           {{
-            ['curl', '--silent', '--show-error', '--fail', '--http2', '--max-time', '15',
+            ['curl', '--silent', '--show-error', '--fail', '--max-time', '15',
              '--write-out', '\n%{http_code}']
             + (['--insecure'] if megaproxy_services.https.certificate == 'self-signed' else [])
             + ['https://' ~ item.hostname ~ ':' ~ (item.port | string) ~ '/']
@@ -118,7 +118,6 @@
           - --max-time
           - "15"
           - --proxy-insecure
-          - --proxy-http2
           - --proxy
           - "https://{{ megaproxy_services.https.endpoint }}:{{ megaproxy_services.https.port }}"
           - "https://example.com/"
@@ -149,7 +148,6 @@
           - --max-time
           - "30"
           - --proxy-insecure
-          - --proxy-http2
           - --proxy
           - "https://{{ megaproxy_services.https.endpoint }}:{{ megaproxy_services.https.port }}"
           - --proxy-user
@@ -184,7 +182,6 @@
           - --max-time
           - "30"
           - --proxy-insecure
-          - --proxy-http2
           - --proxy
           - "https://{{ item.hostname }}:{{ megaproxy_services.https.port }}"
           - --proxy-user
@@ -207,7 +204,6 @@
           - --max-time
           - "30"
           - --proxy-insecure
-          - --proxy-http2
           - --proxy
           - "https://{{ item.chain.host }}:{{ item.chain.port }}"
           - --proxy-user

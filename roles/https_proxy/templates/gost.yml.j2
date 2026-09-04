@@ -9,8 +9,11 @@ services:
       chain: chain-{{ route.name }}
 {% endif %}
       metadata:
-{% if megaproxy_services.https.probe_resistance.enabled %}
+{% if route.probe_resistance.enabled %}
         probeResist: "file:/opt/megaproxy/decoy.html"
+{% if route.probe_resistance.knock %}
+        knock: {{ route.probe_resistance.knock | join(',') | to_json }}
+{% endif %}
 {% endif %}
         proxyAgent: ""
     listener:

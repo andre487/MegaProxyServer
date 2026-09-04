@@ -4,7 +4,7 @@ import json
 
 from megaproxy_server.export import export_profiles, jump_candidates
 from megaproxy_server.inventory import ansible_inventory, https_routes, load, save
-from megaproxy_server.models import AdminAccess, Host, HttpsService, HttpsUser, Inventory, Services, Settings, SshAuthentication, SshService, SshUser
+from megaproxy_server.models import AdminAccess, Host, HttpsService, HttpsUser, Inventory, ProbeResistance, Services, Settings, SshAuthentication, SshService, SshUser
 
 
 def ssh_host(address: str, user: str = "mp-proxy") -> Host:
@@ -118,6 +118,32 @@ def test_https_sni_routes_are_generated_for_every_exit() -> None:
         {"name": "proxy_nl", "host": "nl.example", "port": 443, "code": "PROXY", "title": "PROXY Nl"},
     ]
     assert ansible_inventory(inventory)["all"]["vars"]["megaproxy_users"]["https"][0]["name"] == "alice"
+
+
+def test_route_probe_override_is_independent() -> None:
+    admin = AdminAccess(user="deploy", private_key_file="/keys/admin", public_key="ssh-ed25519 AAAA admin")
+    user = HttpsUser(name="alice", password="long-password-alice")
+    hosts = {
+        "entry": Host(address="entry.example", admin=admin, services=Services(https=HttpsService(endpoint="entry.example", certificate="domain", acme_email="a@example.com", users=[user], chain_entry=True, direct=False))),
+        "exit": Host(address="exit.example", admin=admin, services=Services(https=HttpsService(endpoint="exit.example", certificate="domain", acme_email="a@example.com", users=[user], chain_exit=True, chain_password="machine-password-long"))),
+    }
+    inventory = Inventory(
+        settings=Settings(
+            https_chains_enabled=True,
+            https_chain_domain="chains.example",
+            https_chain_pairs=[{
+                "entry": "entry",
+                "exit": "exit",
+                "country_code": "US",
+                "probe_resistance": ProbeResistance(enabled=True, knock=["private.example"]),
+            }],
+        ),
+        hosts=hosts,
+    )
+
+    route = https_routes(inventory, "entry")[0]
+    assert route["probe_resistance"]["enabled"] is True
+    assert route["probe_resistance"]["knock"] == ["private.example"]
 
 
 def test_https_chain_title_falls_back_to_entry_title() -> None:

@@ -137,13 +137,14 @@ def https_routes(inventory: Inventory, name: str) -> list[dict[str, Any]]:
     routes: list[dict[str, Any]] = []
     entry_title = https.title or _host_title(name)
     if https.direct:
-        routes.append({"name": "direct", "hostname": https.endpoint, "title": entry_title, "country_code": name.split("_", 1)[0].upper(), "port": inventory.settings.https_chain_backend_port, "chain": None})
+        routes.append({"name": "direct", "hostname": https.endpoint, "title": entry_title, "country_code": name.split("_", 1)[0].upper(), "port": inventory.settings.https_chain_backend_port, "chain": None, "probe_resistance": https.probe_resistance.model_dump(mode="json")})
     if inventory.settings.https_chains_enabled and https.chain_entry:
         configured_pairs = [pair for pair in inventory.settings.https_chain_pairs if pair.entry == name]
         allowed_exits = {pair.exit for pair in configured_pairs} if inventory.settings.https_chain_pairs else None
         pair_hostnames = {pair.exit: pair.hostname for pair in configured_pairs}
         pair_titles = {pair.exit: pair.title for pair in configured_pairs}
         pair_country_codes = {pair.exit: pair.country_code for pair in configured_pairs}
+        pair_probe_resistance = {pair.exit: pair.probe_resistance for pair in configured_pairs}
         exits = [
             (exit_name, exit_host.services.https)
             for exit_name, exit_host in sorted(inventory.hosts.items())
@@ -151,6 +152,7 @@ def https_routes(inventory: Inventory, name: str) -> list[dict[str, Any]]:
             and (allowed_exits is None or exit_name in allowed_exits)
         ]
         for index, (exit_name, exit_https) in enumerate(exits, start=len(routes)):
+            probe_resistance = pair_probe_resistance.get(exit_name) or https.probe_resistance
             routes.append({
                 "name": f"via-{exit_name}",
                 "hostname": pair_hostnames.get(exit_name) or f"{_dns_label(name)}-via-{_dns_label(exit_name)}.{inventory.settings.https_chain_domain}",
@@ -158,6 +160,7 @@ def https_routes(inventory: Inventory, name: str) -> list[dict[str, Any]]:
                 "country_code": pair_country_codes.get(exit_name) or exit_name.split("_", 1)[0].upper(),
                 "port": inventory.settings.https_chain_backend_port + index,
                 "chain": {"host": exit_https.endpoint, "port": exit_https.port, "username": exit_https.chain_username, "password": exit_https.chain_password},
+                "probe_resistance": probe_resistance.model_dump(mode="json"),
             })
     return routes
 

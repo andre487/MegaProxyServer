@@ -1,5 +1,7 @@
 from pathlib import Path
 
+from megaproxy_server.models import ProbeResistance
+
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -28,3 +30,32 @@ def test_domain_certificate_detects_openssl_textual_mismatch() -> None:
     # Skipped checks (for example self-signed TLS) have neither rc nor stdout.
     assert "selectattr('rc', 'defined')" in decision_task
     assert "selectattr('stdout', 'defined')" in decision_task
+
+
+def test_probe_resistance_is_opt_in() -> None:
+    resistance = ProbeResistance()
+    assert resistance.enabled is False
+    assert resistance.mode == "disabled"
+    assert resistance.knock == []
+
+
+def test_probe_resistance_supports_configurable_knock_hosts() -> None:
+    template = (ROOT / "roles" / "https_proxy" / "templates" / "gost.yml.j2").read_text(
+        encoding="utf-8"
+    )
+
+    assert "probe_resistance.knock | join(',')" in template
+
+    assert ProbeResistance(knock=["private.example"]).knock == ["private.example"]
+
+
+def test_https_proxy_uses_http2() -> None:
+    template = (ROOT / "roles" / "https_proxy" / "templates" / "gost.yml.j2").read_text(
+        encoding="utf-8"
+    )
+
+    assert "type: http2" in template
+    assert "alpn: [h2, http/1.1]" in template
+
+    verify = (ROOT / "playbooks" / "verify.yml").read_text(encoding="utf-8")
+    assert "--proxy-http2" not in verify

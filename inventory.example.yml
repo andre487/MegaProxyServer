@@ -30,12 +30,13 @@ hosts:
         port: 443
         certificate: domain
         acme_email: admin@example.com
-        gost_version: 3.2.6
+        gost_version: 3.3.0
         certbot_version: v5.4.0
         probe_resistance:
-          enabled: true
-          mode: local_decoy
+          enabled: false
+          mode: disabled
           site_title: Personal site
+          knock: []
       ssh:
         enabled: true
         port: 22

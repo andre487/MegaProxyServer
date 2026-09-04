@@ -143,7 +143,10 @@ creates only the declared pairs.
 - `direct`: expose the host's own direct HTTPS route.
 - `chain_username` and `chain_password`: machine credentials between chain nodes. Every exit needs a
   password; it is excluded from user-facing exports.
-- `probe_resistance`: configure the unauthenticated decoy response.
+- `probe_resistance`: optional decoy response for unauthenticated requests. It is disabled by
+  default because browsers obtain stored proxy credentials only after a `407` response, which the
+  decoy suppresses. Explicitly enabling it may break browser proxy authentication.
+  The optional `knock` list specifies hostnames for which GOST returns the normal `407` response.
 
 Chain title precedence is pair `title`, entry HTTPS service `title`, then a title derived from the
 inventory host name.
@@ -161,8 +164,9 @@ direct endpoint, when enabled, and all configured chain hostnames. After a pair 
 detects a missing SAN, expands the certificate and restarts GOST to load it.
 
 Every chain hostname must resolve to its entry server before `apply`. HAProxy reads SNI without
-terminating TLS and forwards the connection to a dedicated loopback GOST listener. The entry then
-connects to the selected exit with machine credentials.
+terminating TLS and forwards the connection to a dedicated loopback GOST HTTP/2 listener. The entry
+then connects to the selected exit with machine credentials. A pair in `https_chain_pairs` may
+override `probe_resistance` for that chain route only.
 
 Certificate renewal runs from a systemd timer. Self-signed mode is an explicit fallback and requires
 clients to allow an invalid proxy certificate.
@@ -227,7 +231,8 @@ directory is suitable for machine-local integrations such as px-manager.
 - Verify SSH fingerprints through a trusted channel.
 - Root SSH login is disabled; the permanent administrator is key-only and has sudo.
 - Provider firewall rules remain the operator's responsibility.
-- Probe resistance hides the protocol from unauthenticated HTTP probes, not the server IP or SNI.
+- Optional probe resistance hides the protocol from unauthenticated HTTP probes, not the server IP
+  or SNI; enable it only after testing the required clients.
 
 ## Development and troubleshooting
 

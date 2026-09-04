@@ -31,7 +31,7 @@ Inventory and generated exports contain secrets. Keep them private and do not co
 
 ## Highlights
 
-- HTTPS CONNECT proxy with TLS 1.2/1.3 and probe-resistant decoy responses
+- HTTPS CONNECT proxy with TLS 1.2/1.3 and optional probe-resistant decoy responses
 - ACME certificates for DNS names and public IP addresses, plus a self-signed fallback
 - SNI-based HTTPS chains through independently selected entry and exit servers
 - Restricted SSH forwarding accounts and dynamic SSH jump profiles

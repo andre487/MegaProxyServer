@@ -28,10 +28,11 @@ class HttpsUser(BaseModel):
 
 
 class ProbeResistance(BaseModel):
-    enabled: bool = True
-    mode: Literal["local_decoy", "status", "disabled"] = "local_decoy"
+    enabled: bool = False
+    mode: Literal["local_decoy", "status", "disabled"] = "disabled"
     status_code: int = Field(default=404, ge=400, le=599)
     site_title: str = "Personal site"
+    knock: list[str] = Field(default_factory=list)
 
 
 class HttpsService(BaseModel):
@@ -41,7 +42,7 @@ class HttpsService(BaseModel):
     port: Port = 443
     certificate: Literal["domain", "ip-acme", "self-signed"] = "domain"
     acme_email: str | None = None
-    gost_version: str = "3.2.6"
+    gost_version: str = "3.3.0"
     certbot_version: str = "v5.4.0"
     users: list[HttpsUser] = Field(min_length=1)
     probe_resistance: ProbeResistance = Field(default_factory=ProbeResistance)
@@ -135,6 +136,7 @@ class HttpsChainPair(BaseModel):
     country_code: str = Field(pattern=r"^[A-Z]{2}$")
     hostname: str | None = None
     title: str | None = None
+    probe_resistance: ProbeResistance | None = None
 
 
 class Settings(BaseModel):
