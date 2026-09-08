@@ -4,13 +4,14 @@ Provision and operate hardened HTTPS and SSH proxy servers with Ansible.
 
 MegaProxyServer manages multiple Debian/Ubuntu hosts from one inventory, keeps proxy users global,
 issues and renews TLS certificates, supports SNI-routed HTTPS chains and exports ready-to-import
-client configurations for MegaProxy, FoxyProxy and SuperProxy.
+client configurations for [MegaProxy for Android](https://github.com/andre487/AndroidMegaProxy),
+FoxyProxy and SuperProxy.
 
 Documentation: **[English](docs/en/README.md)** · **[Русский](docs/ru/README.md)**
 
 ## Quick start
 
-Requirements: macOS or Linux, `uv`, OpenSSH, and a Debian or Ubuntu server reachable through a
+Requirements: macOS or Linux, Python 3.12+, `uv`, OpenSSH, and a Debian or Ubuntu server reachable through a
 sudo-capable SSH account.
 
 ```shell
@@ -20,7 +21,7 @@ sudo-capable SSH account.
 ./mega-proxy verify
 ```
 
-For an existing inventory, pass `--inventory PATH`. Generate client files and display credentials:
+For an existing inventory, pass `--inventory PATH` before the command. Generate client files and display credentials:
 
 ```shell
 ./mega-proxy configs
@@ -28,6 +29,18 @@ For an existing inventory, pass `--inventory PATH`. Generate client files and di
 ```
 
 Inventory and generated exports contain secrets. Keep them private and do not commit them.
+
+## Connect with Android MegaProxy
+
+Install the client using its [installation guide](https://github.com/andre487/AndroidMegaProxy#installation),
+transfer `.generated/configs/MegaProxy.json` privately, and import it in the app. Select a profile,
+run **Test**, verify any SSH host-key prompt, then connect and approve Android VPN access.
+
+The current server exporter produces JSON v7, accepted by the current Android v8 importer.
+Server-side SNI chains are exported as ordinary HTTPS profiles. The app also supports client-side
+**HTTPS with Jump**, which must currently be configured in the app. See the
+[English](docs/en/README.md#android-megaproxy) or [Russian](docs/ru/README.md#android-megaproxy)
+guide for chain setup and reimport behavior.
 
 ## Highlights
 

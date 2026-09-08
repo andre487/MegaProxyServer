@@ -1,0 +1,44 @@
+version: 1
+settings:
+  https_chains_enabled: true
+  https_chain_domain: chains.example.com
+  https_chain_pairs:
+    - entry: de_entry
+      exit: us_exit
+      country_code: US
+      hostname: de-via-us.chains.example.com
+      title: DE -> US
+users:
+  https:
+    - name: alice
+      password: REPLACE_WITH_USER_PASSWORD
+hosts:
+  de_entry:
+    address: 203.0.113.10
+    admin:
+      user: deploy
+      bootstrap_user: root
+      private_key_file: ~/.ssh/id_ed25519
+      public_key: ssh-ed25519 REPLACE_WITH_ADMIN_PUBLIC_KEY
+    services:
+      https:
+        endpoint: de.example.com
+        title: DE direct
+        certificate: domain
+        acme_email: admin@example.com
+        chain_entry: true
+  us_exit:
+    address: 203.0.113.20
+    admin:
+      user: deploy
+      bootstrap_user: root
+      private_key_file: ~/.ssh/id_ed25519
+      public_key: ssh-ed25519 REPLACE_WITH_ADMIN_PUBLIC_KEY
+    services:
+      https:
+        endpoint: us.example.com
+        title: US direct
+        certificate: domain
+        acme_email: admin@example.com
+        chain_exit: true
+        chain_password: REPLACE_WITH_SEPARATE_MACHINE_PASSWORD
