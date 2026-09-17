@@ -7,7 +7,7 @@ from pathlib import Path
 import questionary
 
 from .inventory import DEFAULT_INVENTORY, save
-from .models import AdminAccess, Host, HttpsService, HttpsUser, Inventory, ProbeResistance, Services, Settings, SshAuthentication, SshService, SshUser
+from .models import AdminAccess, Host, HttpsService, HttpsUser, Inventory, ProbeResistance, ProxyUsers, Services, Settings, SshAuthentication, SshService, SshUser
 from .secrets import generate_key, password_hash, public_key, random_password
 
 
@@ -75,16 +75,23 @@ def ask_users(kind: str, host_name: str, forbidden_names: set[str] | None = None
             return users
 
 
-def create_inventory(path: Path = DEFAULT_INVENTORY) -> Inventory:
-    hosts: dict[str, Host] = {}
-    global_https_users = None
-    global_ssh_users = None
-    chains_enabled = bool(questionary.confirm("Enable automatic HTTPS chains between hosts?", default=False).ask())
-    chain_domain = ask_required("Base DNS domain for chain hostnames") if chains_enabled else None
+def create_inventory(path: Path = DEFAULT_INVENTORY, existing: Inventory | None = None) -> Inventory:
+    hosts: dict[str, Host] = dict(existing.hosts) if existing else {}
+    global_https_users = existing.users.https or None if existing else None
+    global_ssh_users = existing.users.ssh or None if existing else None
+    chains_enabled = existing.settings.https_chains_enabled if existing else bool(questionary.confirm("Enable automatic HTTPS chains between hosts?", default=False).ask())
+    chain_domain = existing.settings.https_chain_domain if existing else (ask_required("Base DNS domain for chain hostnames") if chains_enabled else None)
     while True:
         name = ask_required("Inventory host name (for example proxy_eu)")
+        if name in hosts:
+            print("This host already exists. Choose a new inventory name.")
+            continue
         address = ask_required("Public IP address or DNS name")
         bootstrap_user = ask_required("Current SSH login used for the first setup", "root")
+        bootstrap_auth = questionary.select("Initial SSH authentication", choices=["password", "key"]).ask()
+        if bootstrap_auth is None:
+            raise KeyboardInterrupt
+        bootstrap_key = ask_required("Initial private key path") if bootstrap_auth == "key" else None
         admin_user = ask_required("Permanent administrative user to create or update", getpass.getuser())
         existing_proxy_names = {user.name for user in (global_ssh_users or [])}
         while admin_user == "root" or admin_user in existing_proxy_names:
@@ -139,7 +146,7 @@ def create_inventory(path: Path = DEFAULT_INVENTORY) -> Inventory:
         if "ssh" in choices:
             if global_ssh_users is None:
                 print("These SSH proxy users will be configured on every SSH-enabled host.")
-                global_ssh_users = ask_users("SSH", "all-hosts", {admin_user})
+                global_ssh_users = ask_users("SSH", "all-hosts", {admin_user} | {host.admin.user for host in hosts.values()})
             ssh = SshService(
                 port=int(ask_required("SSH proxy port", str(admin_port))),
                 users=global_ssh_users,
@@ -148,7 +155,9 @@ def create_inventory(path: Path = DEFAULT_INVENTORY) -> Inventory:
             address=address,
             admin=AdminAccess(
                 user=admin_user,
-                bootstrap_user=bootstrap_user if bootstrap_user != admin_user else None,
+                bootstrap_user=bootstrap_user,
+                bootstrap_auth=bootstrap_auth,
+                bootstrap_private_key_file=str(Path(bootstrap_key).expanduser().resolve()) if bootstrap_key else None,
                 port=admin_port,
                 private_key_file=str(admin_private.resolve()),
                 public_key=admin_public,
@@ -157,7 +166,13 @@ def create_inventory(path: Path = DEFAULT_INVENTORY) -> Inventory:
         )
         if not questionary.confirm("Add another host?", default=False).ask():
             break
-    inventory = Inventory(settings=Settings(https_chains_enabled=chains_enabled, https_chain_domain=chain_domain), hosts=hosts)
+    settings = existing.settings if existing else Settings(https_chains_enabled=chains_enabled, https_chain_domain=chain_domain)
+    users = ProxyUsers(
+        https=global_https_users or [],
+        ssh=global_ssh_users or [],
+        removed_ssh=list(existing.users.removed_ssh) if existing else [],
+    )
+    inventory = Inventory(settings=settings, users=users, hosts=hosts)
     save(path, inventory, remember_location=True, encrypt=True)
     return inventory
 

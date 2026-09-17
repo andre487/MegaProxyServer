@@ -9,6 +9,7 @@ from pathlib import Path
 import questionary
 from pydantic import ValidationError
 
+from .bootstrap import bootstrap
 from .export import export_profiles, jump_candidates
 from .generate import generate
 from .hooks import run_hooks
@@ -18,6 +19,12 @@ from .users import active_users, remove_users
 from .wizard import create_inventory
 
 
+class ExtendLimit(argparse.Action):
+    def __call__(self, parser, namespace, values, option_string=None):
+        previous = getattr(namespace, self.dest, None)
+        setattr(namespace, self.dest, f"{previous},{values}" if previous else values)
+
+
 def parser() -> argparse.ArgumentParser:
     result = argparse.ArgumentParser(description="Configure MegaProxy HTTPS and SSH servers")
     result.add_argument("--inventory", "-i", help="Inventory configuration path")
@@ -25,12 +32,16 @@ def parser() -> argparse.ArgumentParser:
     sub = result.add_subparsers(dest="command")
     commands = []
     commands.append(sub.add_parser("inventory", help="Create a new inventory"))
+    commands.append(sub.add_parser("add-host", help="Add hosts to the existing inventory"))
+    initial = sub.add_parser("bootstrap", help="Create and verify permanent administrative access")
+    initial.add_argument("--limit", action=ExtendLimit, help="Exact host names, comma-separated or repeated")
+    commands.append(initial)
     commands.append(sub.add_parser("validate", help="Validate inventory and Ansible syntax"))
     commands.append(sub.add_parser("check", help="Run the complete local/CI test suite"))
     for name in ("plan", "apply", "verify"):
         command = sub.add_parser(name)
         commands.append(command)
-        command.add_argument("--limit")
+        command.add_argument("--limit", action=ExtendLimit, help="Host selection; repeat to include more hosts")
         command.add_argument("--tags")
     export = sub.add_parser("export")
     commands.append(export)
@@ -82,30 +93,8 @@ def run_ansible(path: Path, playbook: str, *, check: bool = False, limit: str | 
     return subprocess.run(command, cwd=ROOT).returncode
 
 
-def finish_bootstrap(path: Path, inventory, limit: str | None) -> None:
-    names = set(inventory.hosts)
-    if limit:
-        requested = {part.strip() for part in limit.split(",") if part.strip()}
-        if not requested <= names:
-            print(
-                "Bootstrap completed, but inventory was not switched automatically because --limit uses an Ansible pattern.",
-                file=sys.stderr,
-            )
-            return
-        names = requested
-    changed = []
-    for name in names:
-        admin = inventory.hosts[name].admin
-        if admin.bootstrap_user:
-            admin.bootstrap_user = None
-            changed.append(name)
-    if changed:
-        save(path, inventory)
-        print(f"Administrative connection activated for: {', '.join(sorted(changed))}")
-
-
 def interactive_command() -> str:
-    value = questionary.select("MegaProxy Server", choices=[questionary.Choice("Validate configuration", "validate"), questionary.Choice("Plan changes", "plan"), questionary.Choice("Apply configuration", "apply"), questionary.Choice("Verify configured servers (after apply)", "verify"), questionary.Choice("Encrypt inventory secrets with Ansible Vault", "vault-secrets"), questionary.Choice("Remove proxy users", "remove-users"), questionary.Choice("Show credential summary", "summary"), questionary.Choice("Generate all client configuration formats", "configs"), questionary.Choice("Export MegaProxy profiles", "export"), questionary.Choice("List possible SSH jump chains", "jumps")]).ask()
+    value = questionary.select("MegaProxy Server", choices=[questionary.Choice("Add a host", "add-host"), questionary.Choice("Bootstrap administrative access", "bootstrap"), questionary.Choice("Validate configuration", "validate"), questionary.Choice("Plan changes", "plan"), questionary.Choice("Apply configuration", "apply"), questionary.Choice("Verify configured servers (after apply)", "verify"), questionary.Choice("Encrypt inventory secrets with Ansible Vault", "vault-secrets"), questionary.Choice("Remove proxy users", "remove-users"), questionary.Choice("Show credential summary", "summary"), questionary.Choice("Generate all client configuration formats", "configs"), questionary.Choice("Export MegaProxy profiles", "export"), questionary.Choice("List possible SSH jump chains", "jumps")]).ask()
     if value is None:
         raise KeyboardInterrupt
     return value
@@ -129,6 +118,7 @@ def run_checks() -> int:
         ["pytest"],
         ["python", "-m", "compileall", "-q", "src"],
         ["ansible-playbook", "--syntax-check", "-i", "localhost,", "playbooks/site.yml"],
+        ["ansible-playbook", "--syntax-check", "-i", "localhost,", "playbooks/bootstrap.yml"],
         ["ansible-playbook", "--syntax-check", "-i", "localhost,", "playbooks/verify.yml"],
     ]
     for command in checks:
@@ -150,6 +140,12 @@ def main() -> None:
             return
         command = args.command or interactive_command()
         inventory = load(path)
+        if command == "add-host":
+            create_inventory(path, existing=inventory)
+            print(f"Updated {path}")
+            return
+        if command == "bootstrap":
+            raise SystemExit(bootstrap(path, inventory, getattr(args, "limit", None)))
         if command == "vault-secrets":
             save(path, inventory, encrypt=True)
             print(f"Encrypted secret fields in {path}")
@@ -200,11 +196,11 @@ def main() -> None:
                 code = subprocess.run(["ansible-playbook", "-i", str(generated), str(ROOT / "playbooks" / "site.yml"), "--syntax-check"], cwd=ROOT).returncode
             raise SystemExit(code)
         limit = getattr(args, "limit", None)
+        if command == "apply" and any(host.admin.bootstrap_user for host in inventory.hosts.values()):
+            code = bootstrap(path, inventory, limit)
+            if code:
+                raise SystemExit(code)
         code = run_ansible(path, "verify.yml" if command == "verify" else "site.yml", check=command == "plan", limit=limit, tags=getattr(args, "tags", None))
-        tags = getattr(args, "tags", None)
-        applied_admin = tags is None or "admin" in {tag.strip() for tag in tags.split(",")}
-        if code == 0 and command == "apply" and applied_admin:
-            finish_bootstrap(path, inventory, limit)
         if code == 0 and command == "apply" and not args.no_hooks:
             inventory = load(path)
             generated = write_ansible_inventory(path, inventory)

@@ -11,6 +11,8 @@ Port = Annotated[int, Field(ge=1, le=65535)]
 class AdminAccess(BaseModel):
     user: str = Field(min_length=1, pattern=r"^[a-z_][a-z0-9_-]*$")
     bootstrap_user: str | None = None
+    bootstrap_auth: Literal["key", "password"] = "key"
+    bootstrap_private_key_file: str | None = None
     port: Port = 22
     private_key_file: str
     public_key: str

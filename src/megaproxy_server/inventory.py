@@ -224,7 +224,10 @@ def ansible_inventory(inventory: Inventory) -> dict[str, Any]:
         }
         if https and https.enabled:
             variables["megaproxy_https_public_routes"] = variables_public_routes
-        variables["ansible_ssh_private_key_file"] = host.admin.private_key_file
+        variables["ansible_ssh_private_key_file"] = (
+            host.admin.bootstrap_private_key_file or host.admin.private_key_file
+            if host.admin.bootstrap_user else host.admin.private_key_file
+        )
         if host.services.https:
             try:
                 ipaddress.ip_address(host.services.https.endpoint)

@@ -1,0 +1,84 @@
+---
+- name: Read current SSH connection context
+  ansible.builtin.command: printenv SSH_CONNECTION
+  become: false
+  changed_when: false
+  check_mode: false
+  register: megaproxy_ssh_connection
+
+- name: Read previous administrative SSH policy
+  ansible.builtin.stat:
+    path: /etc/ssh/sshd_config.d/00-megaproxy-admin.conf
+  register: megaproxy_policy_stat
+
+- name: Preserve previous administrative SSH policy
+  ansible.builtin.slurp:
+    src: /etc/ssh/sshd_config.d/00-megaproxy-admin.conf
+  register: megaproxy_policy_previous
+  when: megaproxy_policy_stat.stat.exists
+
+- name: Install and validate administrative SSH policy
+  block:
+    - name: Install global SSH authentication policy
+      ansible.builtin.copy:
+        dest: /etc/ssh/sshd_config.d/00-megaproxy-admin.conf
+        content: |
+          PermitRootLogin no
+          PubkeyAuthentication yes
+          PasswordAuthentication no
+          KbdInteractiveAuthentication no
+        owner: root
+        group: root
+        mode: "0644"
+      notify: Validate and reload administrative ssh policy
+
+    - name: Validate complete SSH configuration
+      ansible.builtin.command: /usr/sbin/sshd -t
+      changed_when: false
+      when: not ansible_check_mode
+
+    - name: Inspect effective administrative SSH authentication
+      ansible.builtin.command:
+        argv:
+          - /usr/sbin/sshd
+          - -T
+          - -C
+          - "user={{ item }},host={{ ansible_facts['hostname'] }},addr={{ megaproxy_ssh_connection.stdout.split()[0] }},laddr={{ megaproxy_ssh_connection.stdout.split()[2] }},lport={{ megaproxy_ssh_connection.stdout.split()[3] }}"
+      loop:
+        - root
+        - "{{ megaproxy_admin.user }}"
+      register: megaproxy_effective_policy
+      changed_when: false
+      when: not ansible_check_mode
+
+    - name: Require effective administrative SSH restrictions
+      ansible.builtin.assert:
+        that:
+          - "'permitrootlogin no' in item.stdout_lines"
+          - "'pubkeyauthentication yes' in item.stdout_lines"
+          - "'passwordauthentication no' in item.stdout_lines"
+          - "'kbdinteractiveauthentication no' in item.stdout_lines"
+        fail_msg: "An existing SSH configuration overrides the administrative policy"
+      loop: "{{ megaproxy_effective_policy.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+      when: not ansible_check_mode
+  rescue:
+    - name: Restore previous administrative SSH policy
+      ansible.builtin.copy:
+        dest: /etc/ssh/sshd_config.d/00-megaproxy-admin.conf
+        content: "{{ megaproxy_policy_previous.content | b64decode }}"
+        owner: root
+        group: root
+        mode: "0644"
+      when: megaproxy_policy_stat.stat.exists
+
+    - name: Remove rejected administrative SSH policy
+      ansible.builtin.file:
+        path: /etc/ssh/sshd_config.d/00-megaproxy-admin.conf
+        state: absent
+      when: not megaproxy_policy_stat.stat.exists
+
+    - name: Report rejected administrative SSH policy
+      ansible.builtin.fail:
+        msg: "Administrative SSH policy validation failed; the previous policy was restored"

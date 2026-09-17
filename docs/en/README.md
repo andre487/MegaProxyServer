@@ -24,6 +24,7 @@ Public-IP ACME certificates require Certbot 5.4+ and Let's Encrypt's short-lived
 
 ```shell
 ./mega-proxy inventory
+./mega-proxy bootstrap
 ./mega-proxy plan
 ./mega-proxy apply
 ./mega-proxy verify
@@ -33,9 +34,30 @@ The wizard can create administrative keys, proxy credentials and an encrypted in
 inventory outside the repository is remembered in the ignored `inventory-path` file. Override it
 at any time with `--inventory PATH`.
 
-For bootstrap, `admin.bootstrap_user` is used for the initial connection. A successful full apply
-creates the permanent administrator, installs its key and removes `bootstrap_user` from inventory.
-Keep the original SSH session open until the permanent login has been tested.
+The wizard supports an initial password or a separate SSH key. Bootstrap prompts for the password
+without echoing it. The password is kept only in a private temporary connection file, removed after
+Ansible exits. Verify the server fingerprint and add its key to `known_hosts` first. Load
+passphrase-protected administrative keys with `ssh-add`.
+
+`bootstrap` creates the administrator and sudo access, checks a fresh key-only login and `sudo -n`,
+then disables root and password-based administrative login. It verifies access again after SSH
+reload and immediately updates inventory per host. SSH proxy users keep password authentication.
+Retrying uses the administrator if already accessible, without requesting the initial password.
+Keep the original SSH session open until verification succeeds. `apply` automatically bootstraps
+selected pending hosts, including when tags are specified. Run bootstrap before planning new hosts.
+
+To add a server while preserving existing settings and proxy users:
+
+```shell
+./mega-proxy add-host
+./mega-proxy bootstrap --limit proxy_new
+./mega-proxy plan --limit proxy_new
+./mega-proxy apply --limit proxy_new
+```
+
+Bootstrap accepts comma-separated exact inventory host names for `--limit`; the flag can be repeated.
+The fresh login check respects local SSH configuration and reports SSH or sudo errors. A later proxy
+installation failure does not switch completed hosts back to root.
 
 ## Commands and inventory
 

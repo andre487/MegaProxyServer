@@ -1,0 +1,44 @@
+---
+- name: Validate administrative access
+  ansible.builtin.assert:
+    that:
+      - megaproxy_admin.user != "root"
+      - megaproxy_admin.public_key | length > 0
+    fail_msg: "A non-root administrator and its public key are required"
+
+- name: Create or update administrative user
+  ansible.builtin.user:
+    name: "{{ megaproxy_admin.user }}"
+    state: present
+    create_home: true
+    password: x
+    update_password: on_create
+    groups: sudo
+    append: true
+  register: megaproxy_admin_account
+
+- name: Create administrative SSH directory
+  ansible.builtin.file:
+    path: "{{ megaproxy_admin_account.home }}/.ssh"
+    state: directory
+    owner: "{{ megaproxy_admin.user }}"
+    mode: "0700"
+
+- name: Install administrative public key
+  ansible.builtin.lineinfile:
+    path: "{{ megaproxy_admin_account.home }}/.ssh/authorized_keys"
+    line: "{{ megaproxy_admin.public_key }}"
+    create: true
+    owner: "{{ megaproxy_admin.user }}"
+    mode: "0600"
+  no_log: true
+
+- name: Allow non-interactive administration through sudo
+  ansible.builtin.copy:
+    dest: "/etc/sudoers.d/megaproxy-{{ megaproxy_admin.user }}"
+    content: "{{ megaproxy_admin.user }} ALL=(ALL:ALL) NOPASSWD: ALL\n"
+    owner: root
+    group: root
+    mode: "0440"
+    validate: /usr/sbin/visudo -cf %s
+

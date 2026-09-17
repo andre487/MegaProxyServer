@@ -1,0 +1,26 @@
+---
+- name: Bootstrap administrative access
+  hosts: all
+  become: true
+  gather_facts: true
+  tasks:
+    - name: Validate supported operating system
+      ansible.builtin.assert:
+        that:
+          - ansible_facts['distribution'] in ['Debian', 'Ubuntu']
+          - megaproxy_bootstrap_phase in ['account', 'policy']
+
+    - name: Install sudo for the administrative account
+      ansible.builtin.apt:
+        name: sudo
+        state: present
+        update_cache: true
+      when: megaproxy_bootstrap_phase == 'account'
+
+    - name: Set up administrative access
+      ansible.builtin.include_role:
+        name: admin
+        tasks_from: "{{ megaproxy_bootstrap_phase }}"
+
+    - name: Apply administrative SSH policy now
+      ansible.builtin.meta: flush_handlers
