@@ -240,6 +240,13 @@ authorized-key files on every SSH host. The last user of an enabled service cann
 ports and flags readable. Existing encryption is preserved. Set `ANSIBLE_VAULT_PASSWORD_FILE` for
 unattended use; otherwise the CLI prompts for a password.
 
+Whenever encrypted inventory is saved, the CLI encrypts all secret fields again, including
+unchanged values. Ansible Vault uses a random salt, so every `!vault` block may change in the diff
+while the passwords themselves remain unchanged. For example, bootstrap saves inventory after
+each successfully configured host when switching to the permanent administrator. This is a current
+limitation of saving: original encrypted blocks are not retained for unchanged secrets. These
+changes alone do not indicate password rotation on the servers or require updating client credentials.
+
 After a successful apply, executable `.hooks/post-config-change` and files in
 `.hooks/post-config-change.d/` run in name order. They receive `MEGAPROXY_INVENTORY`,
 `MEGAPROXY_ANSIBLE_INVENTORY`, `MEGAPROXY_ROOT` and `MEGAPROXY_EVENT`. The ignored `.hooks`
