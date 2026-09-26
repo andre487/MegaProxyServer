@@ -10,7 +10,7 @@ from pathlib import Path
 
 from ruamel.yaml import YAML
 
-from .inventory import ROOT, ansible_inventory, save
+from .inventory import LOCAL_SSH_ARGS, ROOT, ansible_inventory, save
 from .models import Host, Inventory
 
 
@@ -20,10 +20,11 @@ def check_admin(host: Host, *, report_error: bool = False) -> bool:
         '-o', 'PreferredAuthentications=publickey',
         '-o', 'ControlMaster=no', '-o', 'ControlPath=none', '-o', 'ConnectTimeout=10',
         '-p', str(host.admin.port), '-i', str(Path(host.admin.private_key_file).expanduser()),
+        *(shlex.split(LOCAL_SSH_ARGS) if host.local else []),
         *shlex.split(os.environ.get('ANSIBLE_SSH_ARGS', '')),
         *shlex.split(os.environ.get('ANSIBLE_SSH_COMMON_ARGS', '')),
         *shlex.split(os.environ.get('ANSIBLE_SSH_EXTRA_ARGS', '')),
-        '-l', host.admin.user, '--', host.address, 'sudo -n true',
+        '-l', host.admin.user, '--', '127.0.0.1' if host.local else host.address, 'sudo -n true',
     ]
     try:
         result = sp.run(command, capture_output=True, text=True, timeout=30)
@@ -52,6 +53,11 @@ def run_phase(inventory: Inventory, name: str, phase: str, password: str | None 
         variables['ansible_become_password'] = password
         variables['ansible_ssh_common_args'] = '-o PubkeyAuthentication=no -o PreferredAuthentications=password,keyboard-interactive'
     variables['megaproxy_bootstrap_phase'] = phase
+    if host.local and phase == 'account':
+        if os.geteuid() != 0:
+            raise ValueError('Local bootstrap must run as root')
+        variables['ansible_connection'] = 'local'
+        variables['ansible_python_interpreter'] = sys.executable
     # Bootstrap passwords exist only in a private temporary directory for this subprocess.
     with tempfile.TemporaryDirectory(prefix='megaproxy-bootstrap-') as directory:
         path = Path(directory) / 'inventory.yml'
@@ -73,7 +79,7 @@ def bootstrap(path: Path, inventory: Inventory, limit: str | None = None) -> int
         print(f'Bootstrapping administrative access: {name}', flush=True)
         if not check_admin(host):
             password = None
-            if host.admin.bootstrap_auth == 'password':
+            if host.admin.bootstrap_auth == 'password' and not host.local:
                 password = getpass.getpass(f'Initial SSH password for {host.admin.bootstrap_user}@{host.address}: ')
                 if not password:
                     raise ValueError('Initial SSH password must not be empty')

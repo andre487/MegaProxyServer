@@ -5,6 +5,7 @@ import io
 import ipaddress
 import os
 import re
+import shlex
 from pathlib import Path
 from typing import Any
 
@@ -15,6 +16,10 @@ from ansible.parsing.vault import VaultLib, VaultSecret
 from .models import Inventory
 
 ROOT = Path(__file__).resolve().parents[2]
+LOCAL_SSH_ARGS = (
+    "-o StrictHostKeyChecking=yes -o UserKnownHostsFile="
+    + shlex.quote(str(ROOT / ".secrets/local-known-hosts"))
+)
 DEFAULT_INVENTORY = Path.cwd() / "inventory.yml"
 POINTER_FILE = Path.cwd() / "inventory-path"
 _vault_secret: VaultSecret | None = None
@@ -215,13 +220,15 @@ def ansible_inventory(inventory: Inventory) -> dict[str, Any]:
                     }
                 )
         variables: dict[str, Any] = {
-            "ansible_host": host.address,
+            "ansible_host": "127.0.0.1" if host.local else host.address,
             "ansible_user": host.admin.bootstrap_user or host.admin.user,
             "ansible_port": host.admin.port,
             "megaproxy_admin": host.admin.model_dump(mode="json", exclude_none=True),
             "megaproxy_settings": inventory.settings.model_dump(mode="json"),
             "megaproxy_services": services,
         }
+        if host.local:
+            variables["ansible_ssh_common_args"] = LOCAL_SSH_ARGS
         if https and https.enabled:
             variables["megaproxy_https_public_routes"] = variables_public_routes
         variables["ansible_ssh_private_key_file"] = (

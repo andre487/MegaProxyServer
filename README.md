@@ -11,6 +11,19 @@ Documentation: **[English](docs/en/README.md)** · **[Русский](docs/ru/RE
 
 ## Quick start
 
+To configure the Debian/Ubuntu server you are logged into, run the interactive installer:
+
+```shell
+curl -fsSL https://raw.githubusercontent.com/andre487/MegaProxyServer/main/install.sh | sudo bash
+```
+
+It installs dependencies and starts the setup wizard. Keep your SSH session open and save the
+administrative key on your computer before confirming provisioning. See the
+[English](docs/en/README.md#install-on-the-server) or
+[Russian](docs/ru/README.md#установка-на-самом-сервере) walkthrough.
+
+### Manage servers from another machine
+
 Requirements: macOS or Linux, Python 3.12+, `uv`, OpenSSH, and a Debian or Ubuntu server reachable through a
 sudo-capable SSH account.
 
