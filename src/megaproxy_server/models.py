@@ -112,6 +112,7 @@ class Services(BaseModel):
 
 class Host(BaseModel):
     address: str
+    local: bool = False
     admin: AdminAccess = Field(default_factory=AdminAccess)
     services: Services
 

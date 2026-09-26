@@ -75,11 +75,11 @@ def ask_users(kind: str, host_name: str, forbidden_names: set[str] | None = None
             return users
 
 
-def create_inventory(path: Path = DEFAULT_INVENTORY, existing: Inventory | None = None) -> Inventory:
+def create_inventory(path: Path = DEFAULT_INVENTORY, existing: Inventory | None = None, *, local: bool = False) -> Inventory:
     hosts: dict[str, Host] = dict(existing.hosts) if existing else {}
     global_https_users = existing.users.https or None if existing else None
     global_ssh_users = existing.users.ssh or None if existing else None
-    chains_enabled = existing.settings.https_chains_enabled if existing else bool(questionary.confirm("Enable automatic HTTPS chains between hosts?", default=False).ask())
+    chains_enabled = existing.settings.https_chains_enabled if existing else (not local and bool(questionary.confirm("Enable automatic HTTPS chains between hosts?", default=False).ask()))
     chain_domain = existing.settings.https_chain_domain if existing else (ask_required("Base DNS domain for chain hostnames") if chains_enabled else None)
     while True:
         name = ask_required("Inventory host name (for example proxy_eu)")
@@ -87,17 +87,18 @@ def create_inventory(path: Path = DEFAULT_INVENTORY, existing: Inventory | None 
             print("This host already exists. Choose a new inventory name.")
             continue
         address = ask_required("Public IP address or DNS name")
-        bootstrap_user = ask_required("Current SSH login used for the first setup", "root")
-        bootstrap_auth = questionary.select("Initial SSH authentication", choices=["password", "key"]).ask()
+        bootstrap_user = "root" if local else ask_required("Current SSH login used for the first setup", "root")
+        bootstrap_auth = "key" if local else questionary.select("Initial SSH authentication", choices=["password", "key"]).ask()
         if bootstrap_auth is None:
             raise KeyboardInterrupt
-        bootstrap_key = ask_required("Initial private key path") if bootstrap_auth == "key" else None
-        admin_user = ask_required("Permanent administrative user to create or update", getpass.getuser())
+        bootstrap_key = ask_required("Initial private key path") if bootstrap_auth == "key" and not local else None
+        admin_default = "megaproxy-admin" if local else getpass.getuser()
+        admin_user = ask_required("Permanent administrative user to create or update", admin_default)
         existing_proxy_names = {user.name for user in (global_ssh_users or [])}
         while admin_user == "root" or admin_user in existing_proxy_names:
             reason = "cannot be root" if admin_user == "root" else "is already a global SSH proxy login"
             print(f"The permanent administrator {reason}.")
-            admin_user = ask_required("Permanent administrative user to create or update", getpass.getuser())
+            admin_user = ask_required("Permanent administrative user to create or update", admin_default)
         admin_port = int(ask_required("Administrative SSH port", "22"))
         key_source = questionary.select(
             "Administrative SSH key",
@@ -153,6 +154,7 @@ def create_inventory(path: Path = DEFAULT_INVENTORY, existing: Inventory | None 
             )
         hosts[name] = Host(
             address=address,
+            local=local,
             admin=AdminAccess(
                 user=admin_user,
                 bootstrap_user=bootstrap_user,
@@ -164,7 +166,7 @@ def create_inventory(path: Path = DEFAULT_INVENTORY, existing: Inventory | None 
             ),
             services=Services(https=https, ssh=ssh),
         )
-        if not questionary.confirm("Add another host?", default=False).ask():
+        if local or not questionary.confirm("Add another host?", default=False).ask():
             break
     settings = existing.settings if existing else Settings(https_chains_enabled=chains_enabled, https_chain_domain=chain_domain)
     users = ProxyUsers(

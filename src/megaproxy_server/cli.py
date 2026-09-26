@@ -32,6 +32,7 @@ def parser() -> argparse.ArgumentParser:
     sub = result.add_subparsers(dest="command")
     commands = []
     commands.append(sub.add_parser("inventory", help="Create a new inventory"))
+    commands.append(sub.add_parser("setup-local", help="Interactively provision this server (root)"))
     commands.append(sub.add_parser("add-host", help="Add hosts to the existing inventory"))
     initial = sub.add_parser("bootstrap", help="Create and verify permanent administrative access")
     initial.add_argument("--limit", action=ExtendLimit, help="Exact host names, comma-separated or repeated")
@@ -134,6 +135,9 @@ def main() -> None:
     try:
         if args.command == "check":
             raise SystemExit(run_checks())
+        if args.command == "setup-local":
+            from .local_setup import setup_local
+            raise SystemExit(setup_local(discover(args.inventory) or DEFAULT_INVENTORY))
         path = choose_inventory(args.inventory, args.command == "inventory")
         if args.command == "inventory":
             print(f"Created {path}")

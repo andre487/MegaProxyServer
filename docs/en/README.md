@@ -22,6 +22,56 @@ Public-IP ACME certificates require Certbot 5.4+ and Let's Encrypt's short-lived
 
 ## First deployment
 
+### Install on the server
+
+Connect to Debian/Ubuntu with an interactive terminal (`ssh -t`) or use the server console.
+You need root or sudo, curl and internet access. Install curl if necessary:
+
+```shell
+sudo apt-get update && sudo apt-get install -y curl ca-certificates
+```
+
+Start the installer (omit sudo when logged in as root):
+
+```shell
+curl -fsSL https://raw.githubusercontent.com/andre487/MegaProxyServer/main/install.sh | sudo bash
+```
+
+To inspect it first, download with `curl -fsSL URL -o install.sh`, review the file and run
+`sudo bash install.sh`, using the URL above.
+
+1. Confirm dependency installation. The checkout lives in `/opt/megaproxy-server`; Python and
+   project dependencies are installed automatically.
+2. Enter a host name, its **public** IP or DNS name, administrator and current SSH port. Choose or
+   generate an administrative key, then select HTTPS and/or SSH, certificates and proxy users.
+   For domain ACME, point DNS at this server beforehand. Open the required provider firewall ports.
+3. Set and save an Ansible Vault password; subsequent invocations will need it.
+4. Copy the displayed administrative private key to your computer before applying. With existing
+   root access, use another local terminal: `scp root@SERVER:/PATH/TO/KEY ./megaproxy-admin`, then
+   `chmod 600 ./megaproxy-admin`. With a sudo account, transfer securely using sudo to read the
+   file; do not make it publicly readable on the server.
+5. Confirm that the key is saved. Setup creates the administrator locally, checks a fresh SSH login
+   and sudo through loopback, disables root/password administrative login, configures services and
+   the host firewall, verifies provisioning and exports client configurations.
+6. Keep the original session open and test login **from your computer**:
+   `ssh -i ./megaproxy-admin -p PORT ADMIN@SERVER`. Securely retrieve
+   `/opt/megaproxy-server/.generated/configs/MegaProxy.json` using sudo access.
+
+If you cancelled before applying or setup failed, rerun the installer or resume with:
+
+```shell
+sudo /opt/megaproxy-server/mega-proxy setup-local
+```
+
+Existing inventory is reused; the installer does not automatically update an existing checkout.
+For maintenance, run `sudo /opt/megaproxy-server/mega-proxy` with the desired command.
+Inventory, keys and exports stay on the server; keep private backups. In this mode `local: true`
+routes administrative SSH through loopback while client exports retain the public address.
+Only use this inventory on that server. To move control elsewhere, remove `local: true` and update
+key paths. Local setup handles one server; multi-host management is described below.
+
+### Manage from another machine
+
 ```shell
 ./mega-proxy inventory
 ./mega-proxy bootstrap

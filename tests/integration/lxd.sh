@@ -118,3 +118,44 @@ if [[ "$host_count" -ge 2 ]]; then
   echo | openssl s_client -connect 127.0.0.1:19443 -servername example.com -verify_return_error >/dev/null
   ssh -S "$jump_socket" -O exit "mp-ci@$ip_two"
 fi
+
+# Exercise on-server bootstrap with a new administrator, so the local account phase must run.
+if [[ "$host_count" -eq 1 ]]; then
+  sudo lxc exec megaproxy-ci-one -- mkdir -p /opt/megaproxy-server
+  git archive HEAD | sudo lxc exec megaproxy-ci-one -- tar -xf - -C /opt/megaproxy-server
+  sudo lxc file push "$(command -v uv)" megaproxy-ci-one/usr/local/bin/uv
+  sudo lxc exec megaproxy-ci-one -- chmod +x /usr/local/bin/uv
+  sudo lxc file push "$inventory_file" megaproxy-ci-one/opt/megaproxy-server/local.yml
+  sudo lxc exec megaproxy-ci-one --cwd /opt/megaproxy-server -- uv run --frozen --python 3.12 python - <<'PY'
+from pathlib import Path
+from unittest.mock import patch
+
+from megaproxy_server.inventory import load, save
+from megaproxy_server.local_setup import setup_local
+from megaproxy_server.secrets import generate_key
+
+path = Path('local.yml').resolve()
+inventory = load(path)
+host = inventory.hosts['one']
+host.local = True
+host.admin.user = 'ci-local-admin'
+host.admin.bootstrap_user = 'root'
+public, private = generate_key(Path('/root/local-admin'), 'local setup test')
+host.admin.public_key = public
+host.admin.private_key_file = str(private)
+for user in inventory.users.ssh:
+    user.authentication.public_key = public
+    user.authentication.generated_private_key = str(private)
+save(path, inventory)
+with patch('questionary.confirm') as confirm:
+    confirm.return_value.ask.return_value = True
+    assert setup_local(path) == 0
+assert load(path).hosts['one'].admin.bootstrap_user is None
+assert Path('.generated/configs/MegaProxy.json').is_file()
+PY
+  sudo lxc file pull megaproxy-ci-one/root/local-admin "$work_dir/local-admin"
+  sudo chown "$(id -u):$(id -g)" "$work_dir/local-admin"
+  chmod 0600 "$work_dir/local-admin"
+  ssh -i "$work_dir/local-admin" -o BatchMode=yes -o IdentitiesOnly=yes \
+    -o UserKnownHostsFile="$work_dir/known_hosts" "ci-local-admin@$ip_one" 'sudo -n true'
+fi
