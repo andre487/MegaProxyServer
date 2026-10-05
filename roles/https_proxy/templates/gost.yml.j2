@@ -10,7 +10,7 @@ services:
 {% endif %}
       metadata:
 {% if route.probe_resistance.enabled %}
-        probeResist: "file:/opt/megaproxy/decoy.html"
+        probeResist: "host:127.0.0.1:18080"
 {% if route.probe_resistance.knock %}
         knock: {{ route.probe_resistance.knock | join(',') | to_json }}
 {% endif %}
@@ -28,6 +28,16 @@ services:
           maxVersion: VersionTLS13
           alpn: [h2, http/1.1]
 {% endfor %}
+{% if megaproxy_services.https.routes | selectattr('probe_resistance.enabled') | list %}
+  - name: decoy
+    addr: "127.0.0.1:18080"
+    handler:
+      type: file
+      metadata:
+        dir: /opt/megaproxy/decoy
+    listener:
+      type: tcp
+{% endif %}
 
 authers:
   - name: megaproxy-users

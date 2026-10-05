@@ -69,6 +69,16 @@ done
 export ANSIBLE_HOST_KEY_CHECKING=True
 export ANSIBLE_SSH_ARGS="-o UserKnownHostsFile=$work_dir/known_hosts"
 
+# ProxyJump's child ssh reads -F too, but does not inherit command-line -i/-o options.
+cat > "$work_dir/ssh_config" <<EOF
+Host *
+  IdentityFile $key_file
+  IdentitiesOnly yes
+  UserKnownHostsFile $work_dir/known_hosts
+  StrictHostKeyChecking yes
+  BatchMode yes
+EOF
+
 {
   printf '%s\n' 'version: 1' 'settings:' '  manage_firewall: true' '  unattended_upgrades: true' 'hosts:'
   printf '%s\n' '  one:' "    address: $ip_one" '    admin:' '      user: ci-admin' '      bootstrap_user: root' '      port: 22' "      private_key_file: $key_file" "      public_key: \"$public_key\"" '    services:'
@@ -97,8 +107,6 @@ if grep -Eq 'changed=[1-9][0-9]*' "$second_run"; then
 fi
 
 control_socket="$work_dir/direct-control"
-printf '%s\n' 'LogLevel DEBUG1' | sudo lxc exec megaproxy-ci-one -- tee /etc/ssh/sshd_config.d/00-ci-debug.conf >/dev/null
-sudo lxc exec megaproxy-ci-one -- systemctl reload ssh
 if ! ssh -vvv -fNT -M -S "$control_socket" -i "$key_file" -o IdentitiesOnly=yes -o ExitOnForwardFailure=yes -o UserKnownHostsFile="$work_dir/known_hosts" -L 18443:example.com:443 "mp-ci@$ip_one"; then
   sudo lxc exec megaproxy-ci-one -- getent passwd mp-ci || true
   sudo lxc exec megaproxy-ci-one -- passwd -S mp-ci || true
@@ -114,7 +122,11 @@ ssh -S "$control_socket" -O exit "mp-ci@$ip_one"
 
 if [[ "$host_count" -ge 2 ]]; then
   jump_socket="$work_dir/jump-control"
-  ssh -fNT -M -S "$jump_socket" -i "$key_file" -o IdentitiesOnly=yes -o ExitOnForwardFailure=yes -o UserKnownHostsFile="$work_dir/known_hosts" -o "ProxyJump=mp-ci@$ip_one" -L 19443:example.com:443 "mp-ci@$ip_two"
+  if ! ssh -vvv -F "$work_dir/ssh_config" -fNT -M -S "$jump_socket" -o ExitOnForwardFailure=yes -o "ProxyJump=mp-ci@$ip_one" -L 19443:example.com:443 "mp-ci@$ip_two"; then
+    sudo lxc exec megaproxy-ci-two -- journalctl -u ssh --since=-2min --no-pager
+    sudo lxc exec megaproxy-ci-two -- namei -l /etc/ssh/megaproxy_authorized_keys/mp-ci
+    exit 1
+  fi
   echo | openssl s_client -connect 127.0.0.1:19443 -servername example.com -verify_return_error >/dev/null
   ssh -S "$jump_socket" -O exit "mp-ci@$ip_two"
 fi

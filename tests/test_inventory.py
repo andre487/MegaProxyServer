@@ -167,6 +167,9 @@ def test_route_probe_override_is_independent() -> None:
     route = https_routes(inventory, "entry")[0]
     assert route["probe_resistance"]["enabled"] is True
     assert route["probe_resistance"]["knock"] == ["private.example"]
+    public_route = ansible_inventory(inventory)["all"]["hosts"]["entry"]["megaproxy_https_public_routes"][0]
+    assert public_route["probe_resistance_enabled"] is True
+    assert "chain" not in public_route
 
 
 def test_https_chain_title_falls_back_to_entry_title() -> None:

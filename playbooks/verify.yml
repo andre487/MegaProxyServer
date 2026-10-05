@@ -87,17 +87,16 @@
             ['curl', '--silent', '--show-error', '--fail', '--max-time', '15',
              '--write-out', '\n%{http_code}']
             + (['--insecure'] if megaproxy_services.https.certificate == 'self-signed' else [])
-            + ['https://' ~ item.hostname ~ ':' ~ (item.port | string) ~ '/']
+            + ['https://' ~ item.hostname ~ ':' ~ (megaproxy_services.https.port | string) ~ '/']
           }}
       register: decoy_response
       changed_when: false
       delegate_to: localhost
       become: false
-      loop: "{{ megaproxy_https_public_routes | default([]) }}"
+      loop: "{{ megaproxy_https_public_routes | default([]) | selectattr('probe_resistance_enabled') | list }}"
       when:
         - megaproxy_services.https is defined
         - megaproxy_services.https.enabled | bool
-        - megaproxy_services.https.probe_resistance.enabled | bool
 
     - name: Ensure decoy does not disclose proxy software
       ansible.builtin.assert:
@@ -107,8 +106,32 @@
           - "'proxy-authenticate' not in (item.stdout | lower)"
           - "'gost' not in (item.stdout | lower)"
           - "'megaproxy' not in (item.stdout | lower)"
+          - "'content=\"noindex,nofollow\"' in item.stdout"
       loop: "{{ decoy_response.results | default([]) }}"
       when: megaproxy_services.https is defined and megaproxy_services.https.enabled | bool
+
+    - name: Read robots.txt from masked routes
+      ansible.builtin.command:
+        argv: >-
+          {{
+            ['curl', '--silent', '--show-error', '--fail', '--max-time', '15']
+            + (['--insecure'] if megaproxy_services.https.certificate == 'self-signed' else [])
+            + ['https://' ~ item.hostname ~ ':' ~ (megaproxy_services.https.port | string) ~ '/robots.txt']
+          }}
+      loop: "{{ megaproxy_https_public_routes | default([]) | selectattr('probe_resistance_enabled') | list }}"
+      register: robots_responses
+      changed_when: false
+      delegate_to: localhost
+      become: false
+      when: megaproxy_services.https is defined and megaproxy_services.https.enabled | bool
+
+    - name: Require robots.txt to disallow crawling
+      ansible.builtin.assert:
+        that:
+          - >-
+            item.stdout == 'User-agent: *\nDisallow: /'
+      loop: "{{ robots_responses.results | default([]) }}"
+      when: item is not skipped
 
     - name: Probe CONNECT without credentials
       ansible.builtin.command:

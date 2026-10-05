@@ -44,7 +44,6 @@ jobs:
 
   two-host-jump:
     name: Debian 12 two-host Jump
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 35
     steps:
