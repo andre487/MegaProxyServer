@@ -1,7 +1,6 @@
 ---
 - name: Validate and reload ssh
   ansible.builtin.command: sshd -t
-  changed_when: false
   notify: Reload ssh
 
 - name: Reload ssh
