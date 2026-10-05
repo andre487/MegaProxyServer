@@ -69,6 +69,16 @@ done
 export ANSIBLE_HOST_KEY_CHECKING=True
 export ANSIBLE_SSH_ARGS="-o UserKnownHostsFile=$work_dir/known_hosts"
 
+# ProxyJump's child ssh reads -F too, but does not inherit command-line -i/-o options.
+cat > "$work_dir/ssh_config" <<EOF
+Host *
+  IdentityFile $key_file
+  IdentitiesOnly yes
+  UserKnownHostsFile $work_dir/known_hosts
+  StrictHostKeyChecking yes
+  BatchMode yes
+EOF
+
 {
   printf '%s\n' 'version: 1' 'settings:' '  manage_firewall: true' '  unattended_upgrades: true' 'hosts:'
   printf '%s\n' '  one:' "    address: $ip_one" '    admin:' '      user: ci-admin' '      bootstrap_user: root' '      port: 22' "      private_key_file: $key_file" "      public_key: \"$public_key\"" '    services:'
@@ -114,7 +124,7 @@ ssh -S "$control_socket" -O exit "mp-ci@$ip_one"
 
 if [[ "$host_count" -ge 2 ]]; then
   jump_socket="$work_dir/jump-control"
-  ssh -fNT -M -S "$jump_socket" -i "$key_file" -o IdentitiesOnly=yes -o ExitOnForwardFailure=yes -o UserKnownHostsFile="$work_dir/known_hosts" -o "ProxyJump=mp-ci@$ip_one" -L 19443:example.com:443 "mp-ci@$ip_two"
+  ssh -F "$work_dir/ssh_config" -fNT -M -S "$jump_socket" -o ExitOnForwardFailure=yes -o "ProxyJump=mp-ci@$ip_one" -L 19443:example.com:443 "mp-ci@$ip_two"
   echo | openssl s_client -connect 127.0.0.1:19443 -servername example.com -verify_return_error >/dev/null
   ssh -S "$jump_socket" -O exit "mp-ci@$ip_two"
 fi
