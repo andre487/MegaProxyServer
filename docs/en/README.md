@@ -149,6 +149,11 @@ that wait for `407` before sending credentials. Keep it disabled unless tested w
 clients. A route can override the entry setting; `knock` allows selected hostnames to receive the
 normal challenge.
 
+Masked routes serve a static site using GOST's built-in loopback file server. A standard-library
+Python script generates a random heading and abstract SVG once. Repeated `apply` runs keep the
+site; remove `/opt/megaproxy/decoy/index.html` to regenerate it on the next `apply`.
+The page includes `noindex,nofollow`; `/robots.txt` contains `User-agent: *` and `Disallow: /`.
+
 ## HTTPS certificates and chains
 
 Domain certificates are issued with Certbot standalone ACME. An entry certificate contains its

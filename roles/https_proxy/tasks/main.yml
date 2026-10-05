@@ -96,14 +96,20 @@
     - megaproxy_services.https.certificate == "ip-acme"
     - not megaproxy_certificate.stat.exists
 
-- name: Install active-probe decoy page
-  ansible.builtin.template:
-    src: decoy.html.j2
-    dest: /opt/megaproxy/decoy.html
+- name: Create decoy directory
+  ansible.builtin.file:
+    path: /opt/megaproxy/decoy
+    state: directory
     owner: root
     group: root
-    mode: "0644"
-  notify: Restart MegaProxy GOST
+    mode: "0755"
+
+- name: Generate a random static decoy site
+  ansible.builtin.script:
+    cmd: generate-decoy.py /opt/megaproxy/decoy
+    executable: /usr/bin/python3
+    creates: /opt/megaproxy/decoy/index.html
+  when: megaproxy_services.https.routes | selectattr('probe_resistance.enabled') | list | length > 0
 
 - name: Install secret GOST configuration
   ansible.builtin.template:

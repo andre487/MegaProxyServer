@@ -202,7 +202,7 @@ def ansible_inventory(inventory: Inventory) -> dict[str, Any]:
             routes = https_routes(inventory, name)
             services["https"]["routes"] = routes
             variables_public_routes = [
-                {"name": route["name"], "hostname": route["hostname"], "port": https.port, "backend_port": route["port"]}
+                {"name": route["name"], "hostname": route["hostname"], "port": https.port, "backend_port": route["port"], "probe_resistance_enabled": route["probe_resistance"]["enabled"]}
                 for route in routes
             ]
             services["https"]["machine_auth"] = (
