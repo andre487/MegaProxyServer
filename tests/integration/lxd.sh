@@ -124,7 +124,11 @@ ssh -S "$control_socket" -O exit "mp-ci@$ip_one"
 
 if [[ "$host_count" -ge 2 ]]; then
   jump_socket="$work_dir/jump-control"
-  ssh -F "$work_dir/ssh_config" -fNT -M -S "$jump_socket" -o ExitOnForwardFailure=yes -o "ProxyJump=mp-ci@$ip_one" -L 19443:example.com:443 "mp-ci@$ip_two"
+  if ! ssh -vvv -F "$work_dir/ssh_config" -fNT -M -S "$jump_socket" -o ExitOnForwardFailure=yes -o "ProxyJump=mp-ci@$ip_one" -L 19443:example.com:443 "mp-ci@$ip_two"; then
+    sudo lxc exec megaproxy-ci-two -- journalctl -u ssh --since=-2min --no-pager
+    sudo lxc exec megaproxy-ci-two -- namei -l /etc/ssh/megaproxy_authorized_keys/mp-ci
+    exit 1
+  fi
   echo | openssl s_client -connect 127.0.0.1:19443 -servername example.com -verify_return_error >/dev/null
   ssh -S "$jump_socket" -O exit "mp-ci@$ip_two"
 fi
