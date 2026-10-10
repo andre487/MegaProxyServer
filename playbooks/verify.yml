@@ -117,6 +117,26 @@
       changed_when: false
       when: megaproxy_services.ssh is defined and megaproxy_services.ssh.enabled | bool
 
+    - name: Read HTTP3 UDP listeners
+      ansible.builtin.command: ss -H -lun
+      register: http3_listeners
+      changed_when: false
+      when: megaproxy_services.https is defined and megaproxy_services.https.enabled and megaproxy_services.https.http3
+
+    - name: Require every configured MASQUE listener
+      ansible.builtin.assert:
+        that: "':' ~ (item.http3_port | string) in http3_listeners.stdout"
+        fail_msg: "MASQUE route {{ item.name }} is not listening on UDP port {{ item.http3_port }}"
+      loop: "{{ megaproxy_services.https.routes | default([]) | selectattr('http3_port') | list }}"
+      when: megaproxy_services.https is defined and megaproxy_services.https.enabled and megaproxy_services.https.http3
+
+    - name: Require the optional SOCKS5 TCP listener
+      ansible.builtin.wait_for:
+        host: 127.0.0.1
+        port: "{{ megaproxy_services.https.socks5.port }}"
+        timeout: 15
+      when: megaproxy_services.https is defined and megaproxy_services.https.enabled and megaproxy_services.https.socks5.enabled
+
     - name: Read MegaProxy SSH host fingerprint
       ansible.builtin.command: ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub
       register: ssh_fingerprint

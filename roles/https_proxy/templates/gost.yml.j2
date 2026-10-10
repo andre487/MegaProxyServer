@@ -28,6 +28,39 @@ services:
           maxVersion: VersionTLS13
           alpn: [h2, http/1.1]
 {% endfor %}
+{% for route in megaproxy_services.https.routes if route.http3_port %}
+  - name: masque-{{ route.name }}
+    addr: ":{{ route.http3_port }}"
+    handler:
+      type: masque
+      auther: megaproxy-users
+    listener:
+      type: http3
+      metadata:
+        enableDatagrams: true
+      tls:
+        certFile: {{ megaproxy_container_certificate_directory }}/fullchain.pem
+        keyFile: {{ megaproxy_container_certificate_directory }}/privkey.pem
+        rejectUnknownSNI: {{ (not route.is_ip) | lower }}
+        serverNames: [{{ route.hostname | to_json }}]
+        options:
+          minVersion: VersionTLS13
+          maxVersion: VersionTLS13
+          alpn: [h3]
+{% endfor %}
+{% if megaproxy_services.https.socks5.enabled %}
+  - name: socks5
+    addr: ":{{ megaproxy_services.https.socks5.port }}"
+    handler:
+      type: socks5
+      auther: megaproxy-users
+      metadata:
+        udp: true
+        udp.bindRange.min: {{ megaproxy_services.https.socks5.udp_port_min }}
+        udp.bindRange.max: {{ megaproxy_services.https.socks5.udp_port_max }}
+    listener:
+      type: tcp
+{% endif %}
 {% if megaproxy_services.https.routes | selectattr('probe_resistance.enabled') | list %}
   - name: decoy
     addr: "127.0.0.1:18080"

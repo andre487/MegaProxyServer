@@ -71,12 +71,27 @@ def render_config(bundle: dict[str, Any], username: str, password: str, client: 
         proxy = {"type": "HTTPS", "host": route["host"], "port": route["port"],
                  "username": username, "password": password,
                  "allowInvalidProxyCertificate": route["allow_invalid_certificate"]}
+        if route.get("http3_port") == route["port"]:
+            proxy["preferHttp3"] = True
         item = profile(f"{route['title']} / {username}", proxy, len(profiles), route["country_code"],
                        identity=json.dumps(["https", route["host_name"], route["route_name"], username]))
         options = deepcopy(payload["https_options"][json.dumps([route["host_name"], route["route_name"]])])
         item.update({k: v for k, v in options.items() if k != "proxy"})
         proxy.update(options.get("proxy", {}))
         profiles.append(item)
+        if route.get("http3_port") and route.get("masque_profiles"):
+            masque = deepcopy(item)
+            generated = profile(f"{route['title']} MASQUE / {username}",
+                dict(proxy, type="MASQUE", port=route["http3_port"]), len(profiles), route["country_code"],
+                identity=json.dumps(["masque", route["host_name"], route["route_name"], username]))
+            masque.update({k: generated[k] for k in ("id", "name", "color", "proxy")})
+            masque["proxy"].pop("preferHttp3", None)
+            masque.pop("browser", None)  # MASQUE does not use HTTPS knock hosts.
+            profiles.append(masque)
+    for host in bundle.get("socks5_hosts", []):
+        profiles.append(profile(f"{host['name']} SOCKS5 / {username}",
+            {"type": "SOCKS5", "host": host["host"], "port": host["port"], "username": username, "password": password},
+            len(profiles), identity=json.dumps(["socks5", host["name"], username])))
 
     endpoints = []
     for host in bundle["ssh_hosts"]:
@@ -132,7 +147,7 @@ def render_config(bundle: dict[str, Any], username: str, password: str, client: 
         result["privateKeysIncluded"] = False
     elif client in {"android", "android_megaproxy"}:
         result.pop("browser", None)
-        result["profiles"] = [item for item in result["profiles"] if item["proxy"]["type"] != "SOCKS5" and ":" not in item["proxy"]["host"] and ":" not in item["proxy"].get("jump", {}).get("host", "")]
+        result["profiles"] = [item for item in result["profiles"] if ":" not in item["proxy"]["host"] and ":" not in item["proxy"].get("jump", {}).get("host", "")]
         for item in result["profiles"]:
             item.pop("browser", None)
     ids = {item["id"] for item in result["profiles"]}

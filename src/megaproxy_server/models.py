@@ -41,11 +41,27 @@ class ProbeResistance(BaseModel):
     knock: list[str] = Field(default_factory=list)
 
 
+class Socks5Options(BaseModel):
+    enabled: bool = False
+    port: Port = 1080
+    udp_port_min: int = Field(default=40000, ge=1024, le=65535)
+    udp_port_max: int = Field(default=40100, ge=1024, le=65535)
+
+    @model_validator(mode="after")
+    def validate_udp_range(self) -> Socks5Options:
+        if self.udp_port_min > self.udp_port_max:
+            raise ValueError("SOCKS5 UDP port range must be ordered")
+        return self
+
+
 class HttpsService(BaseModel):
     enabled: bool = True
     endpoint: str
     title: str | None = None
     port: Port = 443
+    http3: bool = False
+    masque_profiles: bool = False
+    socks5: Socks5Options = Field(default_factory=Socks5Options)
     certificate: Literal["domain", "ip-acme", "self-signed"] = "domain"
     acme_email: str | None = None
     gost_version: str = "3.3.0"
@@ -63,6 +79,13 @@ class HttpsService(BaseModel):
     def validate_acme(self) -> HttpsService:
         if self.certificate != "self-signed" and not self.acme_email:
             raise ValueError("acme_email is required for domain and IP certificates")
+        if self.masque_profiles and not self.http3:
+            raise ValueError("MASQUE profiles require HTTP/3")
+        if self.socks5.enabled:
+            if not self.direct:
+                raise ValueError("SOCKS5 requires a direct HTTPS endpoint")
+            if any(not 1 <= len(value.encode("utf-8")) <= 255 for user in self.users for value in (user.name, user.password)):
+                raise ValueError("SOCKS5 credentials must contain 1 to 255 UTF-8 bytes")
         return self
 
 
@@ -159,6 +182,13 @@ class Host(BaseModel):
 
     @model_validator(mode="after")
     def validate_users(self) -> Host:
+        https = self.services.https
+        if https and https.enabled and https.socks5.enabled:
+            ports = {self.admin.port, https.port, 18080}
+            if self.services.ssh and self.services.ssh.enabled:
+                ports.add(self.services.ssh.port)
+            if https.socks5.port in ports:
+                raise ValueError("SOCKS5 port conflicts with another service")
         if self.services.config_api and self.services.config_api.enabled:
             ports = {self.admin.port}
             if self.services.ssh and self.services.ssh.enabled:
@@ -268,6 +298,16 @@ class Inventory(BaseModel):
     def hosts_not_empty(self) -> Inventory:
         if not self.hosts:
             raise ValueError("at least one host is required")
+        from .inventory import https_routes
+        for name, host in self.hosts.items():
+            https = host.services.https
+            if not https or not https.enabled or not https.socks5.enabled:
+                continue
+            routes = https_routes(self, name)
+            if https.socks5.port in {route["port"] for route in routes}:
+                raise ValueError("SOCKS5 port conflicts with an HTTPS backend")
+            if any(https.socks5.udp_port_min <= route["http3_port"] <= https.socks5.udp_port_max for route in routes if route["http3_port"]):
+                raise ValueError("SOCKS5 UDP range conflicts with HTTP/3")
         api_services = [host.services.config_api for host in self.hosts.values() if host.services.config_api and host.services.config_api.enabled]
         if len(api_services) > 8:
             raise ValueError("subscriptions support at most eight config API endpoints")

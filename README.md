@@ -1,5 +1,8 @@
 # MegaProxyServer
 
+Optional [HTTP/3, MASQUE and SOCKS5 transports](docs/ru/transports.md) are controlled per host.
+SOCKS5 is disabled by default and is not recommended because it does not encrypt proxy authentication or transport.
+
 Provision and operate hardened HTTPS and SSH proxy servers with Ansible.
 
 MegaProxyServer manages multiple Debian/Ubuntu hosts from one inventory, keeps proxy users global,

@@ -54,6 +54,72 @@ def test_production_kdf_parameters():
         b"test", salt=salt, n=2**17, r=8, p=1, dklen=32, maxmem=256 * 1024 * 1024)
 
 
+def test_generated_transports_are_opt_in_and_client_compatible(inventory, tmp_path):
+    alice = inventory.users.https[0]
+    entry = inventory.hosts["de_entry"].services.https
+    exit_service = inventory.hosts["us_exit"].services.https
+    entry.http3 = exit_service.http3 = True
+    entry.socks5.enabled = True
+    bundle = build_bundle(inventory)
+    document = render_config(bundle, alice.name, alice.password)
+    https = [p["proxy"] for p in document["profiles"] if p["proxy"]["type"] == "HTTPS"]
+    assert https[0]["preferHttp3"] is True
+    assert "preferHttp3" not in https[1]  # Never bypass a server-side chain via direct QUIC.
+    assert all(p["proxy"]["type"] != "MASQUE" for p in document["profiles"])
+    assert sum(p["proxy"]["type"] == "SOCKS5" for p in document["profiles"]) == 1
+    entry.masque_profiles = True
+    bundle = build_bundle(inventory)
+    document = render_config(bundle, alice.name, alice.password)
+    masque = [p for p in document["profiles"] if p["proxy"]["type"] == "MASQUE"]
+    assert len(masque) == 1
+    assert all("browser" not in p and "preferHttp3" not in p["proxy"] for p in masque)
+    assert masque[0]["proxy"]["password"] == alice.password
+    firefox = render_config(bundle, alice.name, alice.password, "browser_firefox")
+    chromium = render_config(bundle, alice.name, alice.password, "browser_chromium")
+    assert any(p["proxy"]["type"] == "SOCKS5" for p in firefox["profiles"])
+    assert not any(p["proxy"]["type"] == "SOCKS5" for p in chromium["profiles"])
+    android = render_config(bundle, alice.name, alice.password, "android")
+    assert any(p["proxy"]["type"] == "SOCKS5" for p in android["profiles"])
+    Draft202012Validator(json.loads((config_bundle.ROOT / "schemas/android-v8.schema.json").read_text())).validate(android)
+    from megaproxy_server.export import export_profiles
+    exported_inventory = inventory.model_copy(deep=True)
+    for host in exported_inventory.hosts.values():
+        host.services.ssh = None
+    path = tmp_path / "export.json"
+    export_profiles(exported_inventory, path)
+    exported = json.loads(path.read_text())
+    assert exported["version"] == 8
+    validate_config(exported)
+    assert {p["proxy"]["type"] for p in exported["profiles"]} >= {"SOCKS5", "MASQUE"}
+
+
+def test_http3_flag_cannot_be_advertised_without_a_listener(inventory):
+    inventory.hosts["de_entry"].services.https.client_profile = {"proxy": {"preferHttp3": True}}
+    with pytest.raises(ValueError, match="preferHttp3 requires HTTP/3"):
+        build_bundle(inventory)
+
+
+@pytest.mark.parametrize("change", [
+    {"masque_profiles": True},
+    {"socks5": {"enabled": True, "port": 443}},
+    {"socks5": {"enabled": True, "port": 10443}},
+    {"socks5": {"enabled": True, "udp_port_min": 40001, "udp_port_max": 40000}},
+])
+def test_invalid_transport_settings(inventory, change):
+    raw = inventory.model_dump()
+    raw["hosts"]["de_entry"]["services"]["https"].update(change)
+    with pytest.raises(ValueError):
+        Inventory.model_validate(raw)
+
+
+def test_socks5_validates_utf8_credential_byte_length(inventory):
+    raw = inventory.model_dump()
+    raw["users"]["https"][0]["password"] = "я" * 130
+    raw["hosts"]["de_entry"]["services"]["https"]["socks5"]["enabled"] = True
+    with pytest.raises(ValueError, match="255 UTF-8 bytes"):
+        Inventory.model_validate(raw)
+
+
 def test_bundle_has_no_plaintext_secrets_and_is_idempotent(inventory, tmp_path):
     path = tmp_path / "bundle.json"
     write_bundle(inventory, path)
@@ -209,7 +275,7 @@ def test_all_config_fields_and_client_projection(inventory):
         ],
     }
     inventory.hosts["de_entry"].services.https.client_profile = {
-        "proxy": {"preferHttp3": True}, "dns": {"provider": "CUSTOM", "customDohUrl": "https://dns.example/dns-query"},
+        "proxy": {"preferHttp3": False}, "dns": {"provider": "CUSTOM", "customDohUrl": "https://dns.example/dns-query"},
         "browser": {"bypass": ["intranet.example"], "authMode": "challenge"},
         "routing": {"allowIpv6": True, "bypassLocalNetworks": False}}
     bundle = build_bundle(inventory)

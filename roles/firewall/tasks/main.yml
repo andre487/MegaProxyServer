@@ -5,6 +5,7 @@
       {{ ([ansible_port | default(22)])
          + ([megaproxy_services.ssh.port] if megaproxy_services.ssh is defined and megaproxy_services.ssh.enabled else [])
          + ([megaproxy_services.https.port] if megaproxy_services.https is defined and megaproxy_services.https.enabled else [])
+         + ([megaproxy_services.https.socks5.port] if megaproxy_services.https is defined and megaproxy_services.https.enabled and megaproxy_services.https.socks5.enabled else [])
          + ([80] if megaproxy_services.https is defined and megaproxy_services.https.enabled and megaproxy_services.https.certificate != 'self-signed' else [])
          + ([megaproxy_services.config_api.port, 80] if megaproxy_services.config_api is defined and megaproxy_services.config_api.enabled else [])
       | map('string') | unique | list }}
@@ -14,6 +15,20 @@
   loop: "{{ megaproxy_allowed_ports }}"
   register: ufw_allow
   changed_when: "'Rule added' in ufw_allow.stdout"
+
+- name: Build optional UDP firewall port list
+  ansible.builtin.set_fact:
+    megaproxy_allowed_udp_ports: >-
+      {{ ((megaproxy_services.https.routes | selectattr('http3_port') | map(attribute='http3_port') | map('string') | list)
+          + ([megaproxy_services.https.socks5.udp_port_min | string ~ ':' ~ megaproxy_services.https.socks5.udp_port_max | string]
+             if megaproxy_services.https.socks5.enabled else []))
+          if megaproxy_services.https is defined and megaproxy_services.https.enabled else [] }}
+
+- name: Allow enabled HTTP3 and SOCKS5 UDP relay ports
+  ansible.builtin.command: "ufw allow {{ item }}/udp"
+  loop: "{{ megaproxy_allowed_udp_ports }}"
+  register: ufw_allow_udp
+  changed_when: "'Rule added' in ufw_allow_udp.stdout"
 
 - name: Read firewall policy
   ansible.builtin.command: ufw status verbose

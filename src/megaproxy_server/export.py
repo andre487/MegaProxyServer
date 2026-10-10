@@ -70,7 +70,18 @@ def export_profiles(inventory: Inventory, output: Path, include_all_jumps: bool 
                     title = route["title"] if route["name"] != "direct" or https.title else host_name
                     name = f"{title} / {user.name}"
                     proxy = {"type": "HTTPS", "host": route["hostname"], "port": https.port, "username": user.name, "password": user.password, "allowInvalidProxyCertificate": https.certificate == "self-signed", "sshProfile": "DEFAULT", "trustedHostKey": "", "acceptAnyHostKey": False}
+                    if route["http3_port"] == https.port:
+                        proxy["preferHttp3"] = True
                     profiles.append(_profile(name, proxy, len(profiles), route["country_code"]))
+                    if route["http3_port"] and https.masque_profiles:
+                        masque = dict(proxy, type="MASQUE", port=route["http3_port"])
+                        masque.pop("preferHttp3", None)
+                        profiles.append(_profile(f"{title} MASQUE / {user.name}", masque, len(profiles), route["country_code"]))
+            if https.socks5.enabled:
+                for user in https.users:
+                    profiles.append(_profile(f"{host_name} SOCKS5 / {user.name}", {
+                        "type": "SOCKS5", "host": https.endpoint, "port": https.socks5.port,
+                        "username": user.name, "password": user.password}, len(profiles)))
         if host.services.ssh and host.services.ssh.enabled:
             for user in host.services.ssh.users:
                 name = f"{host_name} / {user.name}"
@@ -78,6 +89,8 @@ def export_profiles(inventory: Inventory, output: Path, include_all_jumps: bool 
     if include_all_jumps:
         profiles.extend(_jump_profiles(inventory, len(profiles)))
     result = configuration(profiles)
+    if any(host.services.https and host.services.https.enabled and (host.services.https.http3 or host.services.https.socks5.enabled) for host in inventory.hosts.values()):
+        result["version"] = 8
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
     output.chmod(0o600)
