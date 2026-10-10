@@ -15,6 +15,38 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  transports:
+    name: GOST HTTP3 and SOCKS5
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          version: "0.12.5"
+          python-version: "3.12"
+
+      - name: Install test dependencies
+        run: uv sync --locked --all-groups
+
+      - name: Download pinned GOST release
+        run: |
+          mkdir -p "$RUNNER_TEMP/megaproxy-gost"
+          cd "$RUNNER_TEMP/megaproxy-gost"
+          curl --fail --location --retry 3 --max-time 120 \
+            https://github.com/go-gost/gost/releases/download/v3.3.0/gost_3.3.0_linux_amd64.tar.gz \
+            --output gost_3.3.0_linux_amd64.tar.gz
+          echo '676fb7f78d267b6ae73df719c0c7f2b565dde7147da935cfafbc1e1da558b6d5  gost_3.3.0_linux_amd64.tar.gz' | sha256sum --check
+          tar -xzf gost_3.3.0_linux_amd64.tar.gz
+
+      - name: Verify authenticated SOCKS5 and MASQUE TCP and UDP
+        run: uv run --frozen python tests/integration/transports.py --gost "$RUNNER_TEMP/megaproxy-gost/gost"
+
   ubuntu:
     name: Ubuntu 24.04 host
     runs-on: ubuntu-latest

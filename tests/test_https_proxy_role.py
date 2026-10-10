@@ -1,8 +1,43 @@
 from pathlib import Path
+import json
 
-from megaproxy_server.models import ProbeResistance
+from jinja2 import Environment, StrictUndefined
+from ruamel.yaml import YAML
+
+from megaproxy_server.models import Inventory, ProbeResistance
+from megaproxy_server.inventory import ansible_inventory
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def test_rendered_transports_and_firewall_are_opt_in():
+    inv = Inventory.model_validate({"hosts": {"one": {"address": "192.0.2.1",
+        "admin": {"user": "deploy", "private_key_file": "/keys/admin", "public_key": "ssh-ed25519 TEST"},
+        "services": {"https": {"endpoint": "proxy.example", "certificate": "self-signed",
+            "users": [{"name": "alice", "password": "long-test-password"}]}}}}})
+    env = Environment(undefined=StrictUndefined)
+    env.filters["to_json"] = json.dumps
+    def render():
+        variables = ansible_inventory(inv)["all"]["hosts"]["one"]
+        variables["megaproxy_container_certificate_directory"] = "/certs"
+        text = env.from_string((ROOT / "roles/https_proxy/templates/gost.yml.j2").read_text()).render(**variables)
+        config = YAML(typ="safe").load(text)
+        firewall = YAML(typ="safe").load((ROOT / "roles/firewall/tasks/main.yml").read_text())
+        expression = next(task["ansible.builtin.set_fact"]["megaproxy_allowed_udp_ports"] for task in firewall if task.get("name") == "Build optional UDP firewall port list")
+        udp = env.from_string(expression).render(**variables)
+        return config, udp
+    config, udp = render()
+    assert len(config["services"]) == 1
+    assert udp == "[]"
+    service = inv.hosts["one"].services.https
+    service.http3 = service.socks5.enabled = True
+    config, udp = render()
+    assert [s["handler"]["type"] for s in config["services"]] == ["http2", "masque", "socks5"]
+    masque = config["services"][1]
+    assert masque["listener"]["type"] == "http3"
+    assert masque["listener"]["metadata"]["enableDatagrams"] is True
+    assert masque["handler"]["auther"] == "megaproxy-users"
+    assert "443" in udp and "40000:40100" in udp
 
 
 def test_https_role_loads_a_certificate_newer_than_the_service() -> None:

@@ -125,6 +125,7 @@
           "type": "string",
           "enum": [
             "HTTPS",
+            "SOCKS5",
             "MASQUE",
             "HTTPS_JUMP",
             "SSH",
@@ -144,8 +145,7 @@
         },
         "username": {
           "type": "string",
-          "maxLength": 4096,
-          "pattern": "^[^:\\r\\n]*$"
+          "maxLength": 4096
         },
         "password": {
           "type": "string",
@@ -213,6 +213,34 @@
             "properties": {
               "jump": {
                 "$ref": "#/$defs/jump"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "SOCKS5"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "username": {
+                "type": "string",
+                "pattern": "^[^\\r\\n]*$"
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "username": {
+                "type": "string",
+                "pattern": "^[^:\\r\\n]*$"
               }
             }
           }

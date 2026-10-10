@@ -89,8 +89,14 @@ users:
 
 ## Контракт MegaProxyConfig
 
-Используются [формат v8](https://github.com/andre487/MegaProxyConfig/blob/602c9c2a689afda6fc0a685435a1d3f82d404120/docs/configuration.md)
-и [протокол доставки](https://github.com/andre487/MegaProxyConfig/blob/602c9c2a689afda6fc0a685435a1d3f82d404120/docs/subscription-protocol.md).
+Настройка генерации новых транспортов описана в [Транспортах прокси](transports.md).
+`services.https.http3` включает поддержку и флаг предпочтения HTTP/3 на совместимых
+HTTPS-маршрутах; отдельные MASQUE-профили требуют `masque_profiles: true`.
+SOCKS5-профили генерируются только при `socks5.enabled: true`; SOCKS5 не рекомендуется
+из-за отсутствия шифрования транспорта и реквизитов аутентификации.
+
+Используются [формат v8](https://github.com/andre487/MegaProxyConfig/blob/5c0758c855712415bf2f1dfd6f9a97fd92d5dfee/docs/configuration.md)
+и [протокол доставки](https://github.com/andre487/MegaProxyConfig/blob/5c0758c855712415bf2f1dfd6f9a97fd92d5dfee/docs/subscription-protocol.md).
 Схемы и LICENSE сохранены в `schemas/`; commit и SHA-256 зафиксированы в
 [lock-файле](../../schemas/megaproxy-config.lock.json). Проверки работают без скачивания `main`.
 Выбор 403 вместо стандартного 401 с Basic challenge сделан намеренно по политике этого API.

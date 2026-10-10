@@ -29,6 +29,13 @@ hosts:
         endpoint: example.com
         title: EU
         port: 443
+        http3: false
+        masque_profiles: false
+        socks5:
+          enabled: false
+          port: 1080
+          udp_port_min: 40000
+          udp_port_max: 40100
         certificate: domain
         acme_email: admin@example.com
         gost_version: 3.3.0

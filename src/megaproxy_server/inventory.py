@@ -180,6 +180,8 @@ def https_routes(inventory: Inventory, name: str) -> list[dict[str, Any]]:
                 "chain": {"host": exit_https.endpoint, "port": exit_https.port, "username": exit_https.chain_username, "password": exit_https.chain_password},
                 "probe_resistance": probe_resistance.model_dump(mode="json"),
             })
+    for route in routes:
+        route["http3_port"] = https.port if https.http3 and not route["chain"] else None
     return routes
 
 

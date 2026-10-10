@@ -52,7 +52,7 @@ def validate_profile_options(options: dict[str, Any]) -> None:
 
 
 def build_bundle(inventory: Inventory, previous: dict[str, Any] | None = None) -> dict[str, Any]:
-    bundle: dict[str, Any] = {"version": 1, "https_routes": [], "ssh_hosts": [], "users": {}, "urls": []}
+    bundle: dict[str, Any] = {"version": 1, "https_routes": [], "socks5_hosts": [], "ssh_hosts": [], "users": {}, "urls": []}
     https_options, ssh_options = {}, {}
     for name, host in inventory.hosts.items():
         api = host.services.config_api
@@ -67,6 +67,8 @@ def build_bundle(inventory: Inventory, previous: dict[str, Any] | None = None) -
             for route in https_routes(inventory, name):
                 resistance = route["probe_resistance"]
                 options = deepcopy(https.client_profile)
+                if options.get("proxy", {}).get("preferHttp3") and route["http3_port"] != https.port:
+                    raise ValueError("preferHttp3 requires HTTP/3 on the same direct endpoint")
                 if resistance["enabled"] and resistance["knock"]:
                     options.setdefault("browser", {}).setdefault("knockHost", resistance["knock"][0])
                 https_options[json.dumps([name, route["name"]])] = options
@@ -76,7 +78,11 @@ def build_bundle(inventory: Inventory, previous: dict[str, Any] | None = None) -
                     "title": route["title"] if route["name"] != "direct" or https.title else name,
                     "country_code": route["country_code"] if re.fullmatch(r"[A-Z]{2}", route["country_code"]) else "",
                     "allow_invalid_certificate": https.certificate == "self-signed",
+                    "http3_port": route["http3_port"],
+                    "masque_profiles": https.masque_profiles,
                 })
+            if https.socks5.enabled:
+                bundle["socks5_hosts"].append({"name": name, "host": https.endpoint, "port": https.socks5.port})
         ssh = host.services.ssh
         if ssh and ssh.enabled:
             validate_profile_options(ssh.client_profile)
