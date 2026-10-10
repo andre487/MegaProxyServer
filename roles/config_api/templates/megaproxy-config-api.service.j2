@@ -1,0 +1,21 @@
+[Unit]
+Description=MegaProxy configuration API
+After=network.target
+
+[Service]
+User=megaproxy-config-api
+Group=megaproxy-config-api
+ExecStart=/usr/bin/python3 /opt/megaproxy-config-api/config_api.py --bundle /opt/megaproxy-config-api/bundle.json --port {{ megaproxy_services.config_api.backend_port }} --path {{ megaproxy_services.config_api.path }} --url {{ megaproxy_config_api_url }} --interval {{ megaproxy_services.config_api.interval_minutes }}
+Restart=on-failure
+RestartSec=5
+UMask=0077
+LimitCORE=0
+MemoryMax=384M
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+RestrictAddressFamilies=AF_INET AF_UNIX
+
+[Install]
+WantedBy=multi-user.target

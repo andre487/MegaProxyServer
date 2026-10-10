@@ -1,0 +1,26 @@
+---
+- name: Check configuration API units
+  ansible.builtin.stat:
+    path: "/etc/systemd/system/{{ item }}"
+  loop: [megaproxy-config-api.service, megaproxy-config-api-renew.timer]
+  register: megaproxy_config_api_units
+
+- name: Stop disabled configuration API and renewal timer
+  ansible.builtin.systemd_service:
+    name: "{{ item.item }}"
+    enabled: false
+    state: stopped
+  loop: "{{ megaproxy_config_api_units.results }}"
+  when: item.stat.exists and not ansible_check_mode
+
+- name: Remove disabled API data
+  ansible.builtin.file:
+    path: /opt/megaproxy-config-api/bundle.json
+    state: absent
+  no_log: true
+
+- name: Remove disabled API TLS listener
+  ansible.builtin.file:
+    path: /etc/nginx/conf.d/megaproxy-config-api.conf
+    state: absent
+  notify: Reload config API nginx

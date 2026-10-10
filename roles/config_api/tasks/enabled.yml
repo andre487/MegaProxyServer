@@ -1,0 +1,182 @@
+---
+- name: Install config API runtime and TLS frontend
+  ansible.builtin.apt:
+    name: [nginx, python3, python3-cryptography]
+    state: present
+    lock_timeout: 600
+
+- name: Enable Docker for pinned ACME client
+  ansible.builtin.systemd_service:
+    name: docker
+    enabled: true
+    state: started
+  when: not ansible_check_mode
+
+- name: Create config API service account
+  ansible.builtin.group:
+    name: megaproxy-config-api
+    system: true
+
+- name: Create config API service user
+  ansible.builtin.user:
+    name: megaproxy-config-api
+    system: true
+    create_home: false
+    shell: /usr/sbin/nologin
+
+- name: Create private config API directory
+  ansible.builtin.file:
+    path: /opt/megaproxy-config-api
+    state: directory
+    owner: root
+    group: megaproxy-config-api
+    mode: "0750"
+
+- name: Select config API certificate and public URL
+  ansible.builtin.set_fact:
+    megaproxy_config_api_certificate_directory: /etc/letsencrypt/live/megaproxy-config-api
+    megaproxy_config_api_url: >-
+      {{ 'https://' ~ ('[' ~ megaproxy_services.config_api.endpoint ~ ']'
+           if ':' in megaproxy_services.config_api.endpoint else megaproxy_services.config_api.endpoint | lower)
+         ~ (':' ~ (megaproxy_services.config_api.port | string) if megaproxy_services.config_api.port != 443 else '')
+         ~ megaproxy_services.config_api.path }}
+
+- name: Remove packaged HTTP welcome site
+  ansible.builtin.file:
+    path: /etc/nginx/sites-enabled/default
+    state: absent
+  register: megaproxy_nginx_default
+
+- name: Activate nginx without its welcome site
+  ansible.builtin.systemd_service:
+    name: nginx
+    enabled: true
+    state: "{{ 'restarted' if megaproxy_nginx_default.changed else 'started' }}"
+  when: not ansible_check_mode
+
+- name: Check config API certificate
+  ansible.builtin.stat:
+    path: "{{ megaproxy_config_api_certificate_directory }}/fullchain.pem"
+  register: megaproxy_config_api_certificate
+
+- name: Check config API certificate identity
+  ansible.builtin.command:
+    argv:
+      - openssl
+      - x509
+      - "{{ '-checkip' if megaproxy_services.config_api.certificate == 'ip-acme' else '-checkhost' }}"
+      - "{{ megaproxy_services.config_api.endpoint }}"
+      - -noout
+      - -checkend
+      - "86400"
+      - -in
+      - "{{ megaproxy_config_api_certificate_directory }}/fullchain.pem"
+  register: megaproxy_config_api_certificate_identity
+  changed_when: false
+  failed_when: false
+  when: megaproxy_config_api_certificate.stat.exists
+
+- name: Obtain trusted domain or public IP certificate
+  ansible.builtin.command:
+    argv: >-
+      {{ ['docker', 'run', '--rm', '--network', 'host',
+          '-v', '/etc/letsencrypt:/etc/letsencrypt', '-v', '/var/lib/letsencrypt:/var/lib/letsencrypt',
+          'certbot/certbot:' ~ megaproxy_services.config_api.certbot_version,
+          'certonly', '--standalone', '--non-interactive', '--agree-tos', '--no-eff-email', '--force-renewal',
+          '--cert-name', 'megaproxy-config-api', '--email', megaproxy_services.config_api.acme_email]
+         + (['--preferred-profile', 'shortlived', '--ip-address', megaproxy_services.config_api.endpoint]
+            if megaproxy_services.config_api.certificate == 'ip-acme'
+            else ['--domain', megaproxy_services.config_api.endpoint]) }}
+  when: >-
+    not megaproxy_config_api_certificate.stat.exists or
+    megaproxy_config_api_certificate_identity.rc | default(1) != 0 or
+    'does NOT match certificate' in (megaproxy_config_api_certificate_identity.stdout | default(''))
+  notify: Reload config API nginx
+
+- name: Install standalone config API modules
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../src/megaproxy_server/{{ item }}"
+    dest: "/opt/megaproxy-config-api/{{ item }}"
+    owner: root
+    group: megaproxy-config-api
+    mode: "0640"
+  loop: [config_api.py, config_format.py]
+  notify: Restart config API
+
+- name: Install hashed access records and encrypted SSH secrets
+  ansible.builtin.copy:
+    src: "{{ megaproxy_config_api_bundle_file }}"
+    dest: /opt/megaproxy-config-api/bundle.json
+    owner: root
+    group: megaproxy-config-api
+    mode: "0640"
+  no_log: true
+  diff: false
+  notify: Restart config API
+
+- name: Install config API systemd service
+  ansible.builtin.template:
+    src: megaproxy-config-api.service.j2
+    dest: /etc/systemd/system/megaproxy-config-api.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart config API
+
+- name: Install config API nginx configuration
+  ansible.builtin.template:
+    src: nginx.conf.j2
+    dest: /etc/nginx/conf.d/megaproxy-config-api.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Reload config API nginx
+
+- name: Validate complete nginx configuration
+  ansible.builtin.command: nginx -t
+  changed_when: false
+  when: not ansible_check_mode
+
+- name: Install config API certificate renewal service
+  ansible.builtin.template:
+    src: megaproxy-config-api-renew.service.j2
+    dest: /etc/systemd/system/megaproxy-config-api-renew.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Reload config API systemd
+
+- name: Install config API certificate renewal timer
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/megaproxy-config-api-renew.timer
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      [Unit]
+      Description=Renew config API TLS certificate
+      [Timer]
+      OnBootSec=10min
+      OnUnitActiveSec=12h
+      RandomizedDelaySec=1h
+      Persistent=true
+      [Install]
+      WantedBy=timers.target
+  notify: Reload config API systemd
+
+- name: Activate config API and certificate units
+  ansible.builtin.meta: flush_handlers
+
+- name: Enable config API
+  ansible.builtin.systemd_service:
+    name: megaproxy-config-api
+    enabled: true
+    state: started
+  when: not ansible_check_mode
+
+- name: Enable certificate renewal timer
+  ansible.builtin.systemd_service:
+    name: megaproxy-config-api-renew.timer
+    enabled: true
+    state: started
+  when: not ansible_check_mode

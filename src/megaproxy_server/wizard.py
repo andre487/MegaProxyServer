@@ -7,7 +7,7 @@ from pathlib import Path
 import questionary
 
 from .inventory import DEFAULT_INVENTORY, save
-from .models import AdminAccess, Host, HttpsService, HttpsUser, Inventory, ProbeResistance, ProxyUsers, Services, Settings, SshAuthentication, SshService, SshUser
+from .models import AdminAccess, ConfigApiService, Host, HttpsService, HttpsUser, Inventory, ProbeResistance, ProxyUsers, Services, Settings, SshAuthentication, SshService, SshUser
 from .secrets import generate_key, password_hash, public_key, random_password
 
 
@@ -29,6 +29,17 @@ def ask_password(message: str) -> str:
         print("Use at least 16 characters.")
         return ask_password(message)
     return value
+
+
+def link_users(inventory: Inventory) -> None:
+    for user in inventory.users.https:
+        selected = questionary.checkbox(
+            f"SSH accounts for HTTPS user {user.name}",
+            choices=[questionary.Choice(ssh.name, checked=ssh.name in user.ssh_users) for ssh in inventory.users.ssh],
+        ).ask()
+        if selected is None:
+            raise KeyboardInterrupt
+        user.ssh_users = selected
 
 
 def ask_users(kind: str, host_name: str, forbidden_names: set[str] | None = None) -> list:
@@ -119,11 +130,24 @@ def create_inventory(path: Path = DEFAULT_INVENTORY, existing: Inventory | None 
             ).ask()
             admin_private = Path(ask_required("Private key path")).expanduser() if selected == "Enter another path" else Path(selected)
             admin_public = public_key(admin_private)
-        choices = questionary.checkbox("Services on this host", choices=[questionary.Choice("HTTPS proxy", "https"), questionary.Choice("SSH proxy", "ssh")], validate=lambda selected: bool(selected) or "Select at least one service").ask()
+        choices = questionary.checkbox("Services on this host", choices=[questionary.Choice("HTTPS proxy", "https"), questionary.Choice("SSH proxy", "ssh"), questionary.Choice("Configuration API", "config_api")], validate=lambda selected: (bool(selected) and not {"https", "config_api"}.issubset(selected)) or "Select services; config API must be separate from HTTPS proxy").ask()
         if choices is None:
             raise KeyboardInterrupt
         https = None
         ssh = None
+        config_api = None
+        if "config_api" in choices:
+            endpoint = ask_required("Config API endpoint", address)
+            config_api = ConfigApiService(
+                endpoint=endpoint,
+                certificate="ip-acme" if _is_ip(endpoint) else "domain",
+                acme_email=ask_required("ACME email"),
+                port=int(ask_required("Config API HTTPS port", "443")),
+                path=ask_required("Config API path", "/api/config"),
+            )
+            if global_https_users is None:
+                print("The configuration API uses the global HTTPS proxy accounts.")
+                global_https_users = ask_users("HTTPS", "all-hosts")
         if "https" in choices:
             endpoint = ask_required("HTTPS endpoint", address)
             certificate = questionary.select("Certificate type", choices=[questionary.Choice("ACME domain certificate", "domain"), questionary.Choice("ACME public IP certificate", "ip-acme"), questionary.Choice("Self-signed (expert, weaker)", "self-signed")], default="ip-acme" if _is_ip(endpoint) else "domain").ask()
@@ -164,7 +188,7 @@ def create_inventory(path: Path = DEFAULT_INVENTORY, existing: Inventory | None 
                 private_key_file=str(admin_private.resolve()),
                 public_key=admin_public,
             ),
-            services=Services(https=https, ssh=ssh),
+            services=Services(https=https, ssh=ssh, config_api=config_api),
         )
         if local or not questionary.confirm("Add another host?", default=False).ask():
             break
@@ -175,6 +199,8 @@ def create_inventory(path: Path = DEFAULT_INVENTORY, existing: Inventory | None 
         removed_ssh=list(existing.users.removed_ssh) if existing else [],
     )
     inventory = Inventory(settings=settings, users=users, hosts=hosts)
+    if users.https and users.ssh and (not existing or not existing.users.https or not existing.users.ssh):
+        link_users(inventory)
     save(path, inventory, remember_location=True, encrypt=True)
     return inventory
 

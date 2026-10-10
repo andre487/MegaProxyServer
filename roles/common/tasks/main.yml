@@ -16,7 +16,8 @@
           'fail2ban',
           'unattended-upgrades'
         ]
-        + (['docker.io'] if megaproxy_services.https is defined and megaproxy_services.https.enabled else [])
+        + (['docker.io'] if (megaproxy_services.https is defined and megaproxy_services.https.enabled)
+                            or (megaproxy_services.config_api is defined and megaproxy_services.config_api.enabled) else [])
         + (['haproxy'] if megaproxy_services.https is defined and megaproxy_services.https.enabled else [])
       }}
     state: present

@@ -26,6 +26,68 @@
         fail_msg: "HTTPS provisioning is incomplete: /usr/bin/docker is missing. Run './mega-proxy apply'."
       when: megaproxy_services.https is defined and megaproxy_services.https.enabled | bool
   tasks:
+    - name: Check configuration API services
+      ansible.builtin.command: "systemctl is-active {{ item }}"
+      changed_when: false
+      loop: [nginx, megaproxy-config-api, megaproxy-config-api-renew.timer]
+      when: megaproxy_services.config_api is defined and megaproxy_services.config_api.enabled | bool
+
+    - name: Verify configuration API denies unauthenticated requests
+      ansible.builtin.uri:
+        url: "{{ megaproxy_config_api_url }}"
+        status_code: 403
+        validate_certs: true
+        use_proxy: false
+      delegate_to: localhost
+      become: false
+      when: megaproxy_services.config_api is defined and megaproxy_services.config_api.enabled | bool
+
+    - name: Verify configuration API authenticated snapshot
+      ansible.builtin.uri:
+        url: "{{ megaproxy_config_api_url }}"
+        url_username: "{{ megaproxy_users.https[0].name }}"
+        url_password: "{{ megaproxy_users.https[0].password }}"
+        force_basic_auth: true
+        status_code: 200
+        return_content: true
+        validate_certs: true
+        use_proxy: false
+      register: config_api_snapshot
+      delegate_to: localhost
+      become: false
+      no_log: true
+      when: megaproxy_services.config_api is defined and megaproxy_services.config_api.enabled | bool
+
+    - name: Require a canonical configuration snapshot
+      ansible.builtin.assert:
+        that:
+          - config_api_snapshot.json.schema == 'net.megaproxy487.config'
+          - config_api_snapshot.json.version == 8
+          - config_api_snapshot.json.profiles | length > 0
+        fail_msg: "Configuration API returned an invalid snapshot"
+      no_log: true
+      when: megaproxy_services.config_api is defined and megaproxy_services.config_api.enabled | bool
+
+    - name: Verify configuration API robots.txt
+      ansible.builtin.uri:
+        url: "{{ 'https://' ~ megaproxy_config_api_url.split('://')[1].split('/')[0] ~ '/robots.txt' }}"
+        status_code: 200
+        return_content: true
+        validate_certs: true
+        use_proxy: false
+      register: config_api_robots
+      delegate_to: localhost
+      become: false
+      when: megaproxy_services.config_api is defined and megaproxy_services.config_api.enabled | bool
+
+    - name: Require configuration API indexing protection
+      ansible.builtin.assert:
+        that:
+          - >-
+            config_api_robots.content == 'User-agent: *\nDisallow: /\n'
+          - "'noindex' in config_api_robots.x_robots_tag"
+      when: megaproxy_services.config_api is defined and megaproxy_services.config_api.enabled | bool
+
     - name: Validate HAProxy configuration
       ansible.builtin.command: haproxy -c -f /etc/haproxy/haproxy.cfg
       changed_when: false

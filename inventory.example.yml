@@ -6,6 +6,7 @@ users:
   https:
     - name: alice
       password: REPLACE_WITH_AT_LEAST_16_CHARACTERS
+      ssh_users: [mp-alice]
   ssh:
     - name: mp-alice
       authentication:
