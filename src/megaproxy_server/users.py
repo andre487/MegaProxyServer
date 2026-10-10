@@ -28,6 +28,8 @@ def remove_users(inventory: Inventory, selected: list[UserRef]) -> None:
             inventory.users.https = [user for user in inventory.users.https if user.name != ref.login]
         elif ref.service == "SSH":
             inventory.users.ssh = [user for user in inventory.users.ssh if user.name != ref.login]
+            for user in inventory.users.https:
+                user.ssh_users = [name for name in user.ssh_users if name != ref.login]
             if ref.login not in inventory.users.removed_ssh:
                 inventory.users.removed_ssh.append(ref.login)
     for host in inventory.hosts.values():

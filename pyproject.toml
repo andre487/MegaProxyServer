@@ -5,6 +5,8 @@ description = "Provision hardened HTTPS and SSH proxy servers for MegaProxy"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+  "cryptography>=43,<51",
+  "jsonschema>=4.23,<5",
   "ansible-core>=2.19,<2.21",
   "passlib>=1.7.4,<2",
   "pydantic>=2.11,<3",

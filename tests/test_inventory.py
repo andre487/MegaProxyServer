@@ -1,10 +1,25 @@
 from pathlib import Path
 
 import json
+import pytest
 
 from megaproxy_server.export import export_profiles, jump_candidates
 from megaproxy_server.inventory import ansible_inventory, https_routes, load, save
 from megaproxy_server.models import AdminAccess, Host, HttpsService, HttpsUser, Inventory, ProbeResistance, Services, Settings, SshAuthentication, SshService, SshUser
+from megaproxy_server.secrets import generate_key
+
+
+def test_admin_public_key_is_derived_when_omitted(tmp_path: Path) -> None:
+    expected, private = generate_key(tmp_path / "admin", "test admin")
+    host = ssh_host("192.0.2.1")
+    host.admin = AdminAccess(user="deploy", private_key_file=str(private))
+    inventory = Inventory(hosts={"one": host})
+    projected = ansible_inventory(inventory)["all"]["hosts"]["one"]
+    assert projected["megaproxy_admin"]["public_key"].split()[:2] == expected.split()[:2]
+    assert host.admin.public_key == ""
+    private.unlink()
+    with pytest.raises(ValueError, match="Cannot derive administrative public key for one"):
+        ansible_inventory(inventory)
 
 
 def ssh_host(address: str, user: str = "mp-proxy") -> Host:
@@ -18,10 +33,37 @@ def test_round_trip_and_ansible_projection(tmp_path: Path) -> None:
     save(path, source)
     loaded = load(path)
     assert loaded == source
-    assert ansible_inventory(loaded)["all"]["hosts"]["one"]["ansible_host"] == "192.0.2.1"
+    projected = ansible_inventory(loaded)["all"]["hosts"]["one"]
+    assert projected["ansible_host"] == "192.0.2.1"
+    assert projected["ansible_user"] == "deploy"
+    assert loaded.hosts["one"].admin.bootstrap_auth == "key"
     saved = path.read_text(encoding="utf-8")
     assert "users:\n  https:" in saved
     assert saved.count("users:") == 1
+
+
+def test_ssh_links_round_trip_and_shared_account(tmp_path: Path) -> None:
+    source = Inventory(hosts={"one": ssh_host("192.0.2.1", "tun-alice")})
+    source.users.https = [
+        HttpsUser(name="alice", password="long-password-alice", ssh_users=["tun-alice"]),
+        HttpsUser(name="bob", password="long-password-bob", ssh_users=["tun-alice"]),
+        HttpsUser(name="carol", password="long-password-carol"),
+    ]
+    path = tmp_path / "inventory.yml"
+    save(path, source)
+    loaded = load(path)
+    assert [user.ssh_users for user in loaded.users.https] == [["tun-alice"], ["tun-alice"], []]
+
+
+@pytest.mark.parametrize("links, message", [
+    (["missing"], "unknown SSH users"),
+    (["tun-alice", "tun-alice"], "duplicate SSH links"),
+])
+def test_invalid_ssh_links_are_rejected(links: list[str], message: str) -> None:
+    source = Inventory(hosts={"one": ssh_host("192.0.2.1", "tun-alice")})
+    source.users.https = [HttpsUser(name="alice", password="long-password-alice", ssh_users=links)]
+    with pytest.raises(ValueError, match=message):
+        Inventory.model_validate(source.model_dump())
 
 
 def test_bootstrap_user_is_used_until_promotion() -> None:
@@ -43,12 +85,18 @@ def test_encrypted_inventory_stays_encrypted_after_save(tmp_path: Path, monkeypa
     host = ssh_host("192.0.2.1")
     host.services.ssh.users = [SshUser(name="mp-password", authentication=SshAuthentication(type="password", password="long-password-value", password_hash="$6$long-password-hash"))]
     source = Inventory(hosts={"one": host})
+    source.settings.client_config = {"profiles": [{"id": "extra", "proxy": {
+        "type": "HTTPS_JUMP", "host": "exit.example", "port": 443,
+        "password": "extra-profile-password", "jump": {
+            "host": "jump.example", "port": 443, "privateKey": "extra-private-key-value"}}}]}
     save(path, source, encrypt=True)
     content = path.read_text(encoding="utf-8")
     assert not content.startswith("$ANSIBLE_VAULT;")
     assert "hosts:" in content
     assert "!vault" in content
     assert "long-password-value" not in content
+    assert "extra-profile-password" not in content
+    assert "extra-private-key-value" not in content
     loaded = load(path)
     save(path, loaded)
     assert b"!vault" in path.read_bytes()

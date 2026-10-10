@@ -1,0 +1,8 @@
+---
+- name: Deploy enabled configuration API
+  ansible.builtin.include_tasks: enabled.yml
+  when: megaproxy_services.config_api.enabled | bool
+
+- name: Remove disabled configuration API
+  ansible.builtin.include_tasks: disabled.yml
+  when: not megaproxy_services.config_api.enabled | bool

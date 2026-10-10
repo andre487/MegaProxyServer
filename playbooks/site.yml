@@ -26,6 +26,9 @@
     - role: https_proxy
       when: megaproxy_services.https is defined and megaproxy_services.https.enabled | bool
       tags: [https]
+    - role: config_api
+      when: megaproxy_services.config_api is defined
+      tags: [config_api]
   post_tasks:
     - name: Create MegaProxy state directory
       ansible.builtin.file:

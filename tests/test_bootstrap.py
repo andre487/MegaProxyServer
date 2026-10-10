@@ -83,13 +83,20 @@ def test_password_inventory_is_private_temporary_and_host_scoped(monkeypatch):
         paths.append(path)
         assert path.stat().st_mode & 0o777 == 0o600
         assert path.parent.stat().st_mode & 0o777 == 0o700
-        variables = YAML(typ='safe').load(path)['all']['hosts']['new']
+        hosts = YAML(typ='safe').load(path)['all']['hosts']
+        assert set(hosts) == {'new'}
+        variables = hosts['new']
         assert variables['ansible_password'] == 'root-secret'
         assert variables['ansible_user'] == 'root'
         assert 'root-secret' not in ' '.join(command)
         return SimpleNamespace(returncode=0)
     monkeypatch.setattr(module.sp, 'run', run)
-    assert module.run_phase(inventory(), 'new', 'account', 'root-secret') == 0
+    source = inventory()
+    unrelated = source.hosts['new'].model_copy(deep=True)
+    unrelated.admin.public_key = ''
+    unrelated.admin.private_key_file = '/missing/unrelated-key'
+    source.hosts['unrelated'] = unrelated
+    assert module.run_phase(source, 'new', 'account', 'root-secret') == 0
     assert not paths[0].exists()
 
 

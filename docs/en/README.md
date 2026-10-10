@@ -134,6 +134,13 @@ Use dedicated SSH proxy logins, separate from the administrator. SSH key exports
 `generated_private_key` on the control machine and embed its contents; a public key alone is not
 enough to generate a client configuration. Android MegaProxy requires an unencrypted private key.
 
+To link SSH accounts explicitly, set `ssh_users: [tun-alice]` on an HTTPS user or run
+`./mega-proxy link-users` to choose existing accounts. The wizard offers this selection when
+creating users of both types. An empty or omitted `ssh_users` means no links; names are never
+matched automatically. Unknown accounts and duplicates fail inventory validation. An SSH account
+may be linked to multiple HTTPS users; removing an SSH account also removes its links. These links
+provide metadata for personalized delivery; the current `export` and `configs` commands still export all users.
+
 For country flags, start host identifiers with a two-letter country code followed by `_`, such as
 `de_entry` and `us_exit`. Explicit HTTPS chain pairs supply the exit country in `country_code`.
 The code is a display hint; use the client connection test to check the observed exit country.
@@ -186,6 +193,12 @@ Directories use mode `0700` and files `0600`. Generation is idempotent and does 
 servers. Exports contain plaintext passwords and private keys; handle them as secrets.
 
 ## Android MegaProxy
+
+Optional `services.config_api` deploys personalized HTTPS configuration feeds to separate,
+equal peers. See the [inventory example](../../inventory.config-api.example.yml) and
+[configuration API guide (Russian)](../ru/config-api.md). Feeds use canonical v8, scrypt access
+verification, password-encrypted SSH secrets, client projections, bootstrap subscriptions and
+authenticated ETags. `/robots.txt` is public; other paths and invalid credentials return 403.
 
 Compatibility was reviewed on 2026-09-08 against AndroidMegaProxy
 [revision c8190e9](https://github.com/andre487/AndroidMegaProxy/tree/c8190e97b705a2c4578d278c40a690e97c5d5f27).

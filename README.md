@@ -41,6 +41,10 @@ For an existing inventory, pass `--inventory PATH` before the command. Generate 
 ./mega-proxy summary
 ```
 
+Optional personalized configuration feeds can run on separate HTTPS hosts using the same
+inventory and user credentials. See [config API setup](docs/ru/config-api.md) and the
+[inventory example](inventory.config-api.example.yml).
+
 Inventory and generated exports contain secrets. Keep them private and do not commit them.
 
 ## Connect with Android MegaProxy

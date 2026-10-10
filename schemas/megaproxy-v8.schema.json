@@ -1,0 +1,663 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/andre487/MegaProxyConfig/main/schemas/megaproxy-v8.schema.json",
+  "title": "MegaProxy portable configuration, version 8",
+  "type": "object",
+  "properties": {
+    "schema": {
+      "type": "string",
+      "enum": [
+        "net.megaproxy487.config",
+        "dev.megaproxy.config"
+      ]
+    },
+    "version": {
+      "const": 8
+    },
+    "passwordsIncluded": {
+      "type": "boolean"
+    },
+    "privateKeysIncluded": {
+      "type": "boolean"
+    },
+    "activeProfileId": {
+      "anyOf": [
+        {
+          "type": "string",
+          "maxLength": 256,
+          "minLength": 1
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "alwaysOnProfileId": {
+      "anyOf": [
+        {
+          "type": "string",
+          "maxLength": 256,
+          "minLength": 1
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "diagnosticLogLimitMb": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 100
+    },
+    "tls": {
+      "$ref": "#/$defs/tls"
+    },
+    "ssh": {
+      "$ref": "#/$defs/ssh"
+    },
+    "failover": {
+      "$ref": "#/$defs/failover"
+    },
+    "routing": {
+      "$ref": "#/$defs/routing"
+    },
+    "profiles": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/profile"
+      },
+      "maxItems": 1000,
+      "minItems": 1
+    },
+    "browser": {
+      "type": "object",
+      "properties": {
+        "theme": {
+          "type": "string",
+          "enum": [
+            "system",
+            "light",
+            "dark"
+          ]
+        },
+        "language": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "en",
+            "ru"
+          ]
+        },
+        "routing": {
+          "$ref": "#/$defs/browserRouting"
+        },
+        "webRTC": {
+          "type": "string",
+          "enum": [
+            "browser",
+            "default",
+            "default_public_and_private_interfaces",
+            "default_public_interface_only",
+            "disable_non_proxied_udp",
+            "proxy_only",
+            "disabled"
+          ]
+        }
+      },
+      "required": [],
+      "additionalProperties": true
+    },
+    "subscription": {
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "#/$defs/configSubscription"
+        }
+      ]
+    }
+  },
+  "required": [
+    "schema",
+    "version",
+    "profiles"
+  ],
+  "additionalProperties": true,
+  "$defs": {
+    "profile": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "maxLength": 256,
+          "minLength": 1
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 256
+        },
+        "color": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 2147483647
+        },
+        "countryCode": {
+          "type": "string",
+          "maxLength": 2,
+          "pattern": "^([A-Z]{2})?$"
+        },
+        "proxy": {
+          "$ref": "#/$defs/proxy"
+        },
+        "tls": {
+          "$ref": "#/$defs/tls"
+        },
+        "dns": {
+          "$ref": "#/$defs/dns"
+        },
+        "routing": {
+          "$ref": "#/$defs/routing"
+        },
+        "browser": {
+          "$ref": "#/$defs/browserProfile"
+        }
+      },
+      "required": [
+        "id",
+        "proxy"
+      ],
+      "additionalProperties": true
+    },
+    "proxy": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "HTTPS",
+            "SOCKS5",
+            "HTTPS_JUMP",
+            "SSH",
+            "SSH_JUMP",
+            "MASQUE"
+          ]
+        },
+        "host": {
+          "type": "string",
+          "maxLength": 253,
+          "minLength": 1,
+          "pattern": "^(?:[^\\s/:@?#\\\\]+|\\[?(?:[0-9a-fA-F]{0,4}:){2,7}[0-9a-fA-F]{0,4}\\]?)$"
+        },
+        "port": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        },
+        "username": {
+          "type": "string",
+          "maxLength": 4096,
+          "pattern": "^[^:\\r\\n]*$"
+        },
+        "password": {
+          "type": "string",
+          "maxLength": 16384,
+          "pattern": "^[^\\r\\n]*$"
+        },
+        "privateKey": {
+          "type": "string",
+          "maxLength": 65536
+        },
+        "allowInvalidProxyCertificate": {
+          "type": "boolean"
+        },
+        "sshProfile": {
+          "type": "string",
+          "enum": [
+            "DEFAULT",
+            "OPENSSH_TERMUX",
+            "CONNECTBOT",
+            "JUICESSH",
+            "TERMIUS_ANDROID"
+          ]
+        },
+        "trustedHostKey": {
+          "type": "string",
+          "maxLength": 256
+        },
+        "acceptAnyHostKey": {
+          "type": "boolean"
+        },
+        "jump": {
+          "$ref": "#/$defs/jump"
+        },
+        "preferHttp3": {
+          "type": "boolean",
+          "default": false,
+          "description": "Optional HTTP/3 alpha preference for HTTPS and HTTPS_JUMP profiles. Try MASQUE over QUIC on the same host and numeric UDP port; Jump uses authenticated CONNECT-UDP through the first node with remote exit-host DNS. If either node lacks HTTP/3, required settings or usable datagram/path MTU, select HTTPS over TCP for the entire chain, keeping Jump mandatory. Certificate and authentication errors are terminal. Transport stays fixed for the session. HTTPS fallback blocks ordinary UDP; DNS may still use DoH. Ignored for other types; explicit MASQUE never falls back. Unsupported QUIC fingerprints use HTTPS. Firefox Jump falls back because its DATAGRAM limit cannot fit encapsulated QUIC."
+        }
+      },
+      "required": [
+        "type",
+        "host",
+        "port"
+      ],
+      "additionalProperties": true,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "enum": [
+                  "HTTPS_JUMP",
+                  "SSH_JUMP"
+                ]
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "required": [
+              "jump"
+            ],
+            "properties": {
+              "jump": {
+                "$ref": "#/$defs/jump"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "jump": {
+      "type": "object",
+      "properties": {
+        "host": {
+          "type": "string",
+          "maxLength": 253,
+          "minLength": 1,
+          "pattern": "^(?:[^\\s/:@?#\\\\]+|\\[?(?:[0-9a-fA-F]{0,4}:){2,7}[0-9a-fA-F]{0,4}\\]?)$"
+        },
+        "port": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        },
+        "sameAuthentication": {
+          "type": "boolean",
+          "default": true
+        },
+        "username": {
+          "type": "string",
+          "maxLength": 4096,
+          "pattern": "^[^:\\r\\n]*$"
+        },
+        "password": {
+          "type": "string",
+          "maxLength": 16384,
+          "pattern": "^[^\\r\\n]*$"
+        },
+        "privateKey": {
+          "type": "string",
+          "maxLength": 65536
+        },
+        "trustedHostKey": {
+          "type": "string",
+          "maxLength": 256
+        },
+        "acceptAnyHostKey": {
+          "type": "boolean"
+        },
+        "allowInvalidProxyCertificate": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "host",
+        "port"
+      ],
+      "additionalProperties": true
+    },
+    "tls": {
+      "type": "object",
+      "properties": {
+        "fingerprint": {
+          "type": "string",
+          "enum": [
+            "DEFAULT",
+            "CHROME_ANDROID",
+            "FIREFOX_ANDROID",
+            "EDGE_ANDROID",
+            "RANDOMIZED",
+            "SAMSUNG_INTERNET",
+            "YANDEX_BROWSER",
+            "CUSTOM"
+          ],
+          "description": "Outer TLS/QUIC preset. Android selects the document-level preset; DEFAULT resolves to CHROME_ANDROID. MASQUE supports CHROME_ANDROID, FIREFOX_ANDROID, RANDOMIZED and CUSTOM."
+        },
+        "customJa3": {
+          "type": "string",
+          "maxLength": 8192,
+          "description": "Custom outer handshake JA3. Android HTTPS uses the document-level value; MASQUE uses profiles[].tls.customJa3 for its separate QUIC-compatible JA3. Consumers validate JA3 semantics beyond this schema."
+        }
+      },
+      "required": [],
+      "additionalProperties": true
+    },
+    "routing": {
+      "type": "object",
+      "properties": {
+        "bypassLocalNetworks": {
+          "type": "boolean",
+          "default": true
+        },
+        "routeAllApps": {
+          "type": "boolean"
+        },
+        "selectedPackages": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 256,
+            "pattern": "^[A-Za-z0-9_.]+$"
+          },
+          "maxItems": 1000
+        },
+        "allowIpv6": {
+          "type": "boolean"
+        }
+      },
+      "required": [],
+      "additionalProperties": true
+    },
+    "dns": {
+      "type": "object",
+      "properties": {
+        "provider": {
+          "type": "string",
+          "enum": [
+            "CLOUDFLARE",
+            "GOOGLE",
+            "QUAD9",
+            "YANDEX",
+            "YANDEX_SAFE",
+            "YANDEX_FAMILY",
+            "CUSTOM"
+          ]
+        },
+        "customDohUrl": {
+          "type": "string",
+          "maxLength": 2048
+        }
+      },
+      "required": [],
+      "additionalProperties": true
+    },
+    "ssh": {
+      "type": "object",
+      "properties": {
+        "fingerprint": {
+          "type": "string",
+          "enum": [
+            "DEFAULT",
+            "OPENSSH_TERMUX",
+            "CONNECTBOT",
+            "JUICESSH",
+            "TERMIUS_ANDROID"
+          ]
+        },
+        "authMode": {
+          "type": "string",
+          "enum": [
+            "AUTO",
+            "PASSWORD_ONLY",
+            "KEY_ONLY"
+          ]
+        },
+        "keepaliveSeconds": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 3600
+        },
+        "maxChannels": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 256
+        },
+        "rotationMinutes": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1440
+        },
+        "rotationMb": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10240
+        }
+      },
+      "required": [],
+      "additionalProperties": true
+    },
+    "failover": {
+      "type": "object",
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": [
+            "DISABLED",
+            "SELECTED",
+            "ALL"
+          ]
+        },
+        "profileIds": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 256,
+            "minLength": 1
+          },
+          "maxItems": 1000,
+          "uniqueItems": true
+        }
+      },
+      "required": [],
+      "additionalProperties": true
+    },
+    "browserProfile": {
+      "type": "object",
+      "properties": {
+        "knockHost": {
+          "anyOf": [
+            {
+              "const": ""
+            },
+            {
+              "type": "string",
+              "maxLength": 253,
+              "minLength": 1,
+              "pattern": "^(?:[^\\s/:@?#\\\\]+|\\[?(?:[0-9a-fA-F]{0,4}:){2,7}[0-9a-fA-F]{0,4}\\]?)$"
+            }
+          ]
+        },
+        "bypass": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 253,
+            "minLength": 1,
+            "pattern": "^(?:[^\\s/:@?#\\\\]+|\\[?(?:[0-9a-fA-F]{0,4}:){2,7}[0-9a-fA-F]{0,4}\\]?)$"
+          },
+          "maxItems": 1000,
+          "uniqueItems": true
+        },
+        "authMode": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "challenge"
+          ]
+        },
+        "masqueTemplate": {
+          "type": "string",
+          "maxLength": 2048
+        }
+      },
+      "required": [],
+      "additionalProperties": true
+    },
+    "browserRouting": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "mode": {
+          "type": "string",
+          "enum": [
+            "domains",
+            "tabs"
+          ]
+        },
+        "domains": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 253,
+            "pattern": "^(?:[^\\s*/:@?#\\\\]+|[a-zA-Z0-9*](?:[a-zA-Z0-9.*-]*[a-zA-Z0-9*])?|\\[?(?:[0-9a-fA-F]{0,4}:){2,7}[0-9a-fA-F]{0,4}\\]?)$"
+          },
+          "maxItems": 1000,
+          "uniqueItems": true
+        },
+        "sites": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 253,
+            "pattern": "^(?:[^\\s*/:@?#\\\\]+|[a-zA-Z0-9*](?:[a-zA-Z0-9.*-]*[a-zA-Z0-9*])?|\\[?(?:[0-9a-fA-F]{0,4}:){2,7}[0-9a-fA-F]{0,4}\\]?)$"
+          },
+          "maxItems": 1000,
+          "uniqueItems": true
+        },
+        "subscriptions": {
+          "$ref": "#/$defs/browserSubscriptions"
+        },
+        "assignments": {
+          "type": "array",
+          "maxItems": 1000,
+          "items": {
+            "type": "object",
+            "required": [
+              "domain",
+              "profileId"
+            ],
+            "properties": {
+              "domain": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 253,
+                "pattern": "^[^\\s*/:@?#\\\\]+$"
+              },
+              "profileId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              "includeSubdomains": {
+                "type": "boolean",
+                "default": true
+              }
+            },
+            "additionalProperties": true
+          }
+        },
+        "strategy": {
+          "type": "string",
+          "enum": [
+            "manual",
+            "lists",
+            "profiles",
+            "tabs",
+            "failover"
+          ]
+        }
+      },
+      "required": [],
+      "additionalProperties": true
+    },
+    "browserSubscriptions": {
+      "type": "object",
+      "properties": {
+        "domainSources": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$"
+          },
+          "maxItems": 64,
+          "uniqueItems": true
+        },
+        "siteSources": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$"
+          },
+          "maxItems": 64,
+          "uniqueItems": true
+        },
+        "autoUpdate": {
+          "type": "boolean"
+        },
+        "throughProxy": {
+          "type": "boolean"
+        }
+      },
+      "required": [],
+      "additionalProperties": true
+    },
+    "configSubscription": {
+      "type": "object",
+      "properties": {
+        "url": {
+          "type": "string",
+          "pattern": "^https://",
+          "maxLength": 2048
+        },
+        "username": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "password": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "intervalMinutes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10080
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "fallbackUrls": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^https://",
+            "maxLength": 2048
+          },
+          "maxItems": 7,
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "url"
+      ],
+      "additionalProperties": true
+    }
+  }
+}

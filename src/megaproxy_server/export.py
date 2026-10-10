@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import json
-import uuid
 from pathlib import Path
 from typing import Any
 
+from .config_format import configuration, profile as _profile
 from .inventory import https_routes
 from .models import Host, Inventory, SshUser
 
@@ -16,20 +16,6 @@ def _secret(auth: Any, key: str) -> str:
     if not path or not path.is_file():
         raise ValueError(f"Private key for {key} is unavailable: {path}")
     return path.read_text(encoding="utf-8")
-
-
-def _profile_id(name: str) -> str:
-    return str(uuid.uuid5(uuid.NAMESPACE_URL, f"dev.megaproxy.server/{name}"))
-
-
-def _profile(name: str, proxy: dict[str, Any], color: int, country_code: str = "") -> dict[str, Any]:
-    return {
-        "id": _profile_id(name), "name": name, "color": color, "countryCode": country_code,
-        "proxy": proxy,
-        "tls": {"fingerprint": "DEFAULT", "customJa3": ""},
-        "dns": {"provider": "CLOUDFLARE", "customDohUrl": ""},
-        "routing": {"routeAllApps": True, "selectedPackages": [], "allowIpv6": False, "bypassLocalNetworks": True},
-    }
 
 
 def _ssh_proxy(host_name: str, host: Host, user: SshUser, kind: str = "SSH") -> dict[str, Any]:
@@ -91,7 +77,7 @@ def export_profiles(inventory: Inventory, output: Path, include_all_jumps: bool 
                 profiles.append(_profile(name, _ssh_proxy(host_name, host, user), len(profiles)))
     if include_all_jumps:
         profiles.extend(_jump_profiles(inventory, len(profiles)))
-    result = {"schema": "net.megaproxy487.config", "version": 7, "passwordsIncluded": True, "privateKeysIncluded": True, "diagnosticLogLimitMb": 3, "tls": {"fingerprint": "DEFAULT", "customJa3": ""}, "ssh": {"fingerprint": "DEFAULT", "authMode": "AUTO", "keepaliveSeconds": 30, "maxChannels": 32, "rotationMinutes": 0, "rotationMb": 0}, "failover": {"mode": "DISABLED", "profileIds": []}, "routing": {"routeAllApps": True, "selectedPackages": [], "bypassLocalNetworks": True}, "profiles": profiles}
+    result = configuration(profiles)
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
     output.chmod(0o600)

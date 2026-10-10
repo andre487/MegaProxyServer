@@ -1,0 +1,56 @@
+version: 1
+settings:
+  client_config:
+    routing:
+      bypassLocalNetworks: true
+    browser:
+      theme: system
+      language: auto
+    subscription:
+      intervalMinutes: 60
+      enabled: true
+users:
+  https:
+    - name: alice
+      password: REPLACE_WITH_AT_LEAST_16_CHARACTERS
+hosts:
+  de_proxy:
+    address: 203.0.113.10
+    admin:
+      user: deploy
+      bootstrap_user: root
+      private_key_file: ~/.ssh/id_ed25519
+      public_key: ssh-ed25519 REPLACE_WITH_ADMIN_PUBLIC_KEY
+    services:
+      https:
+        endpoint: proxy.example.com
+        certificate: domain
+        acme_email: admin@example.com
+  config_de:
+    address: 203.0.113.20
+    admin:
+      user: deploy
+      bootstrap_user: root
+      private_key_file: ~/.ssh/id_ed25519
+      public_key: ssh-ed25519 REPLACE_WITH_ADMIN_PUBLIC_KEY
+    services:
+      config_api:
+        enabled: true
+        endpoint: configs.example.com
+        certificate: domain
+        acme_email: admin@example.com
+        path: /api/config
+  config_us:
+    address: 198.51.100.20
+    admin:
+      user: deploy
+      bootstrap_user: root
+      private_key_file: ~/.ssh/id_ed25519
+      public_key: ssh-ed25519 REPLACE_WITH_ADMIN_PUBLIC_KEY
+    services:
+      config_api:
+        enabled: true
+        endpoint: 198.51.100.20
+        certificate: ip-acme
+        acme_email: admin@example.com
+        path: /api/config

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from typing import Annotated, Any, Literal
+import ipaddress
+import re
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -15,7 +17,7 @@ class AdminAccess(BaseModel):
     bootstrap_private_key_file: str | None = None
     port: Port = 22
     private_key_file: str
-    public_key: str
+    public_key: str = ""
 
     @model_validator(mode="after")
     def forbid_root(self) -> AdminAccess:
@@ -27,6 +29,8 @@ class AdminAccess(BaseModel):
 class HttpsUser(BaseModel):
     name: str = Field(min_length=1, pattern=r"^[A-Za-z0-9_.-]+$")
     password: str = Field(min_length=16)
+    ssh_users: list[str] = Field(default_factory=list)
+    client_config: dict[str, Any] = Field(default_factory=dict)
 
 
 class ProbeResistance(BaseModel):
@@ -53,6 +57,7 @@ class HttpsService(BaseModel):
     direct: bool = True
     chain_username: str = "megaproxy-chain"
     chain_password: str | None = None
+    client_profile: dict[str, Any] = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def validate_acme(self) -> HttpsService:
@@ -97,16 +102,52 @@ class SshService(BaseModel):
     max_startups: str = "10:30:60"
     per_source_max_startups: int = Field(default=5, ge=1, le=100)
     fail2ban: bool = True
+    client_profile: dict[str, Any] = Field(default_factory=dict)
+
+
+class ConfigApiService(BaseModel):
+    enabled: bool = True
+    endpoint: str = Field(min_length=1, max_length=253)
+    port: Port = 443
+    path: str = "/api/config"
+    backend_port: int = Field(default=18081, ge=1024, le=65535)
+    certificate: Literal["domain", "ip-acme"] = "domain"
+    acme_email: str = Field(min_length=1)
+    certbot_version: str = "v5.4.0"
+    interval_minutes: int = Field(default=60, ge=1, le=10080)
+
+    @model_validator(mode="after")
+    def validate_endpoint(self) -> ConfigApiService:
+        try:
+            self.endpoint = str(ipaddress.ip_address(self.endpoint))
+            is_ip = True
+        except ValueError:
+            is_ip = False
+            self.endpoint = self.endpoint.lower()
+            if not all(re.fullmatch(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?", label) for label in self.endpoint.split(".")):
+                raise ValueError("config API endpoint must be a hostname or IP address")
+        if is_ip != (self.certificate == "ip-acme"):
+            raise ValueError("config API requires ip-acme for IP endpoints and domain for DNS endpoints")
+        if not re.fullmatch(r"/(?:[A-Za-z0-9_-]+/)*[A-Za-z0-9_.-]+", self.path) or self.path == "/robots.txt" or self.path.rsplit("/", 1)[-1] in {".", ".."}:
+            raise ValueError("config API path must be an absolute path other than /robots.txt")
+        if self.port == self.backend_port:
+            raise ValueError("config API public and loopback ports must differ")
+        if self.port == 80:
+            raise ValueError("port 80 is reserved for ACME certificate issuance")
+        return self
 
 
 class Services(BaseModel):
     https: HttpsService | None = None
     ssh: SshService | None = None
+    config_api: ConfigApiService | None = None
 
     @model_validator(mode="after")
     def any_enabled(self) -> Services:
-        if not ((self.https and self.https.enabled) or (self.ssh and self.ssh.enabled)):
+        if not any(service and service.enabled for service in (self.https, self.ssh, self.config_api)) and not (self.config_api and not self.config_api.enabled):
             raise ValueError("at least one service must be enabled")
+        if self.config_api and self.config_api.enabled and self.https and self.https.enabled:
+            raise ValueError("deploy the config API on a separate host from the HTTPS proxy")
         return self
 
 
@@ -118,6 +159,12 @@ class Host(BaseModel):
 
     @model_validator(mode="after")
     def validate_users(self) -> Host:
+        if self.services.config_api and self.services.config_api.enabled:
+            ports = {self.admin.port}
+            if self.services.ssh and self.services.ssh.enabled:
+                ports.add(self.services.ssh.port)
+            if ports & {self.services.config_api.port, self.services.config_api.backend_port}:
+                raise ValueError("config API ports must differ from SSH ports")
         if self.services.https:
             names = [user.name for user in self.services.https.users]
             if len(names) != len(set(names)):
@@ -149,6 +196,7 @@ class Settings(BaseModel):
     https_chain_domain: str | None = None
     https_chain_backend_port: Port = 10443
     https_chain_pairs: list[HttpsChainPair] = Field(default_factory=list)
+    client_config: dict[str, Any] = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def validate_https_chains(self) -> Settings:
@@ -209,9 +257,9 @@ class Inventory(BaseModel):
             data["users"] = users
         for host in hosts.values():
             services = host.get("services", {})
-            if services.get("https"):
+            if services.get("https") is not None:
                 services["https"]["users"] = users.get("https", [])
-            if services.get("ssh"):
+            if services.get("ssh") is not None:
                 services["ssh"]["users"] = users.get("ssh", [])
                 services["ssh"]["removed_users"] = users.get("removed_ssh", [])
         return data
@@ -220,7 +268,24 @@ class Inventory(BaseModel):
     def hosts_not_empty(self) -> Inventory:
         if not self.hosts:
             raise ValueError("at least one host is required")
-        if any(host.services.https and host.services.https.enabled for host in self.hosts.values()) and not self.users.https:
+        api_services = [host.services.config_api for host in self.hosts.values() if host.services.config_api and host.services.config_api.enabled]
+        if len(api_services) > 8:
+            raise ValueError("subscriptions support at most eight config API endpoints")
+        api_endpoints = [(api.endpoint.lower(), api.port, api.path) for api in api_services]
+        if len(api_endpoints) != len(set(api_endpoints)):
+            raise ValueError("config API endpoints must be unique")
+        ssh_names = {user.name for user in self.users.ssh}
+        for kind in ("https", "ssh"):
+            names = [user.name for user in getattr(self.users, kind)]
+            if len(names) != len(set(names)):
+                raise ValueError(f"global {kind.upper()} user names must be unique")
+        for user in self.users.https:
+            if len(user.ssh_users) != len(set(user.ssh_users)):
+                raise ValueError(f"duplicate SSH links for HTTPS user {user.name!r}")
+            unknown = set(user.ssh_users) - ssh_names
+            if unknown:
+                raise ValueError(f"unknown SSH users linked to HTTPS user {user.name!r}: {', '.join(sorted(unknown))}")
+        if any((host.services.https and host.services.https.enabled) or (host.services.config_api and host.services.config_api.enabled) for host in self.hosts.values()) and not self.users.https:
             raise ValueError("at least one global HTTPS user is required")
         if any(host.services.ssh and host.services.ssh.enabled for host in self.hosts.values()) and not self.users.ssh:
             raise ValueError("at least one global SSH user is required")

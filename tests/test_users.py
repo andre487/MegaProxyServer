@@ -11,7 +11,7 @@ def test_remove_https_and_ssh_users() -> None:
                 https=HttpsService(
                     endpoint="proxy.example",
                     certificate="self-signed",
-                    users=[HttpsUser(name="alice", password="long-password-alice"), HttpsUser(name="bob", password="long-password-bob")],
+                    users=[HttpsUser(name="alice", password="long-password-alice", ssh_users=["mp-alice"]), HttpsUser(name="bob", password="long-password-bob", ssh_users=["mp-alice", "mp-bob"])],
                 ),
                 ssh=SshService(users=[
                     SshUser(name="mp-alice", authentication=SshAuthentication(type="key", public_key="ssh-ed25519 AAAA alice")),
@@ -25,3 +25,5 @@ def test_remove_https_and_ssh_users() -> None:
     assert [user.name for user in inventory.hosts["one"].services.https.users] == ["bob"]
     assert [user.name for user in inventory.hosts["one"].services.ssh.users] == ["mp-bob"]
     assert inventory.hosts["one"].services.ssh.removed_users == ["mp-alice"]
+    assert inventory.users.https[0].ssh_users == ["mp-bob"]
+    Inventory.model_validate(inventory.model_dump())

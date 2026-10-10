@@ -40,7 +40,7 @@ def check_admin(host: Host, *, report_error: bool = False) -> bool:
 
 def run_phase(inventory: Inventory, name: str, phase: str, password: str | None = None) -> int:
     host = inventory.hosts[name]
-    data = ansible_inventory(inventory)
+    data = ansible_inventory(inventory.model_copy(update={'hosts': {name: host}}))
     variables = data['all']['hosts'][name]
     data['all']['hosts'] = {name: variables}
     variables['ansible_user'] = host.admin.user if phase == 'policy' else host.admin.bootstrap_user

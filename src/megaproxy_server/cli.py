@@ -16,7 +16,7 @@ from .hooks import run_hooks
 from .inventory import DEFAULT_INVENTORY, ROOT, discover, load, save, write_ansible_inventory
 from .summary import render_summary
 from .users import active_users, remove_users
-from .wizard import create_inventory
+from .wizard import create_inventory, link_users
 
 
 class ExtendLimit(argparse.Action):
@@ -51,10 +51,14 @@ def parser() -> argparse.ArgumentParser:
     configs = sub.add_parser("configs", help="Generate all supported client configuration formats")
     commands.append(configs)
     configs.add_argument("--output-dir", default=".generated/configs")
+    bundle = sub.add_parser("config-bundle", help="Prepare hashed access records and encrypted config API data")
+    commands.append(bundle)
+    bundle.add_argument("--output", default=".generated/config-api.json")
     summary = sub.add_parser("summary", help="Print credentials for a password manager")
     commands.append(summary)
     summary.add_argument("login", nargs="?", help="Show only this login")
     commands.append(sub.add_parser("remove-users", help="Remove one or more proxy user accounts"))
+    commands.append(sub.add_parser("link-users", help="Choose SSH accounts for each HTTPS user"))
     commands.append(sub.add_parser("vault-secrets", help="Encrypt only secret inventory fields with Ansible Vault"))
     commands.append(sub.add_parser("jumps", help="List all possible SSH jump chains"))
     for command in commands:
@@ -83,7 +87,7 @@ def choose_inventory(explicit: str | None, force_create: bool = False) -> Path:
 
 
 def run_ansible(path: Path, playbook: str, *, check: bool = False, limit: str | None = None, tags: str | None = None) -> int:
-    generated = write_ansible_inventory(path, load(path))
+    generated = write_ansible_inventory(path, load(path), prepare_config_api=playbook == "site.yml")
     command = ["ansible-playbook", "-i", str(generated), str(ROOT / "playbooks" / playbook)]
     if check:
         command += ["--check", "--diff"]
@@ -95,7 +99,7 @@ def run_ansible(path: Path, playbook: str, *, check: bool = False, limit: str | 
 
 
 def interactive_command() -> str:
-    value = questionary.select("MegaProxy Server", choices=[questionary.Choice("Add a host", "add-host"), questionary.Choice("Bootstrap administrative access", "bootstrap"), questionary.Choice("Validate configuration", "validate"), questionary.Choice("Plan changes", "plan"), questionary.Choice("Apply configuration", "apply"), questionary.Choice("Verify configured servers (after apply)", "verify"), questionary.Choice("Encrypt inventory secrets with Ansible Vault", "vault-secrets"), questionary.Choice("Remove proxy users", "remove-users"), questionary.Choice("Show credential summary", "summary"), questionary.Choice("Generate all client configuration formats", "configs"), questionary.Choice("Export MegaProxy profiles", "export"), questionary.Choice("List possible SSH jump chains", "jumps")]).ask()
+    value = questionary.select("MegaProxy Server", choices=[questionary.Choice("Add a host", "add-host"), questionary.Choice("Bootstrap administrative access", "bootstrap"), questionary.Choice("Validate configuration", "validate"), questionary.Choice("Plan changes", "plan"), questionary.Choice("Apply configuration", "apply"), questionary.Choice("Verify configured servers (after apply)", "verify"), questionary.Choice("Encrypt inventory secrets with Ansible Vault", "vault-secrets"), questionary.Choice("Remove proxy users", "remove-users"), questionary.Choice("Link HTTPS users to SSH accounts", "link-users"), questionary.Choice("Show credential summary", "summary"), questionary.Choice("Generate all client configuration formats", "configs"), questionary.Choice("Export MegaProxy profiles", "export"), questionary.Choice("List possible SSH jump chains", "jumps")]).ask()
     if value is None:
         raise KeyboardInterrupt
     return value
@@ -154,6 +158,11 @@ def main() -> None:
             save(path, inventory, encrypt=True)
             print(f"Encrypted secret fields in {path}")
             return
+        if command == "link-users":
+            link_users(inventory)
+            save(path, inventory)
+            print(f"Updated SSH account links in {path}")
+            return
         if command == "remove-users":
             candidates = active_users(inventory)
             if not candidates:
@@ -192,6 +201,12 @@ def main() -> None:
             state = "updated" if changed else "already up to date"
             print(f"Client configurations are {state}: {output_dir}")
             return
+        if command == "config-bundle":
+            from .config_bundle import write_bundle
+            output = Path(args.output).resolve()
+            write_bundle(inventory, output)
+            print(f"Prepared encrypted config API data: {output}")
+            return
         if command == "validate":
             generated = write_ansible_inventory(path, inventory)
             print(f"Inventory is valid: {len(inventory.hosts)} host(s)")
@@ -211,7 +226,8 @@ def main() -> None:
             code = run_hooks(ROOT, "post-config-change", path, generated)
         raise SystemExit(code)
     except (ValidationError, FileNotFoundError, ValueError) as error:
-        print(f"Configuration error: {error}", file=sys.stderr)
+        detail = json.dumps(error.errors(include_input=False, include_context=False, include_url=False)) if isinstance(error, ValidationError) else str(error)
+        print(f"Configuration error: {detail}", file=sys.stderr)
         raise SystemExit(2) from error
     except KeyboardInterrupt:
         print("\nCancelled", file=sys.stderr)
