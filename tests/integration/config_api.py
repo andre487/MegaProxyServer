@@ -107,7 +107,26 @@ def main() -> None:
                 assert status == 403, (path, status)
                 assert "noindex" in headers["X-Robots-Tag"]
                 assert "WWW-Authenticate" not in headers
-            print("HTTPS/nginx integration passed: trusted TLS, v8, authenticated ETag, robots.txt, exact paths, 403 and noindex.")
+            context = ssl.create_default_context(cafile=str(certificates / "fullchain.pem"))
+            for raw in (
+                f"GET {api.path} HTTP/1.1\r\nHost: localhost\r\nAuthorization: {authorization}\r\nAuthorization: Basic bad\r\nConnection: close\r\n\r\n",
+                "GET / HTTP/1.1\r\nBroken header\r\n\r\n",
+            ):
+                with socket.create_connection(("127.0.0.1", public_port), timeout=5) as sock:
+                    with context.wrap_socket(sock, server_hostname="localhost") as secured:
+                        secured.sendall(raw.encode())
+                        response = secured.recv(4096)
+                        assert response.split(b"\r\n", 1)[0].split()[1] == b"403", response
+                        assert b"www-authenticate" not in response.lower()
+            limited = nginx.replace("rate=60000r/m;", "rate=30r/m;").replace("burst=100 nodelay", "burst=20 nodelay")
+            configuration.write_text(f"pid {root}/nginx.pid;\nerror_log {root}/errors.log;\nevents {{ worker_connections 128; }}\nhttp {{\n{limited}\n}}\n")
+            subprocess.run(command + ["-s", "reload"], check=True, capture_output=True)
+            time.sleep(0.2)
+            limited_responses = [request(api.path) for _ in range(40)]
+            assert all(status == 403 for status, _, _ in limited_responses)
+            assert any(body != b"Forbidden\n" for _, _, body in limited_responses)
+            assert all("WWW-Authenticate" not in headers for _, headers, _ in limited_responses)
+            print("HTTPS/nginx integration passed: TLS, v8, ETag, exact paths, duplicate/malformed headers, rate limiting and fail-closed responses.")
         finally:
             process.terminate()
             process.wait(timeout=5)

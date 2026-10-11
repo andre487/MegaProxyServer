@@ -47,6 +47,12 @@ jobs:
       - name: Verify authenticated SOCKS5 and MASQUE TCP and UDP
         run: uv run --frozen python tests/integration/transports.py --gost "$RUNNER_TEMP/megaproxy-gost/gost"
 
+      - name: Verify HTTPS config API through nginx
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y nginx
+          uv run --frozen python tests/integration/config_api.py --nginx /usr/sbin/nginx
+
   ubuntu:
     name: Ubuntu 24.04 host
     runs-on: ubuntu-latest

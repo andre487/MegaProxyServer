@@ -6,7 +6,7 @@ from pathlib import Path
 from urllib.parse import quote, urlencode
 
 from .export import export_profiles
-from .inventory import https_profile_routes, load
+from .inventory import atomic_write, https_profile_routes, load
 from .models import Inventory
 
 COLORS = ["#b9c6f6", "#eef209", "#3100f1", "#8b0000", "#00ced1", "#0f98cf"]
@@ -53,8 +53,7 @@ def render_super_proxy(entries: list[dict[str, object]]) -> str:
 def write_if_changed(path: Path, content: str) -> bool:
     if path.is_file() and path.read_text(encoding="utf-8") == content:
         return False
-    path.write_text(content, encoding="utf-8")
-    path.chmod(0o600)
+    atomic_write(path, content)
     return True
 
 

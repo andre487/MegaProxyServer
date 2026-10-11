@@ -11,10 +11,10 @@
       | map('string') | unique | list }}
 
 - name: Allow required ports before enabling firewall
-  ansible.builtin.command: "ufw allow {{ item }}/tcp"
+  ansible.builtin.command: "ufw allow {{ item }}/tcp comment megaproxy"
   loop: "{{ megaproxy_allowed_ports }}"
   register: ufw_allow
-  changed_when: "'Rule added' in ufw_allow.stdout"
+  changed_when: "'Rule added' in ufw_allow.stdout or 'Rule updated' in ufw_allow.stdout"
 
 - name: Build optional UDP firewall port list
   ansible.builtin.set_fact:
@@ -25,10 +25,53 @@
           if megaproxy_services.https is defined and megaproxy_services.https.enabled else [] }}
 
 - name: Allow enabled HTTP3 and SOCKS5 UDP relay ports
-  ansible.builtin.command: "ufw allow {{ item }}/udp"
+  ansible.builtin.command: "ufw allow {{ item }}/udp comment megaproxy"
   loop: "{{ megaproxy_allowed_udp_ports }}"
   register: ufw_allow_udp
-  changed_when: "'Rule added' in ufw_allow_udp.stdout"
+  changed_when: "'Rule added' in ufw_allow_udp.stdout or 'Rule updated' in ufw_allow_udp.stdout"
+
+- name: Check previously managed firewall ports
+  ansible.builtin.stat:
+    path: /etc/megaproxy/firewall.json
+  register: megaproxy_firewall_state
+
+- name: Read previously managed firewall ports
+  ansible.builtin.slurp:
+    src: /etc/megaproxy/firewall.json
+  register: megaproxy_firewall_previous
+  when: megaproxy_firewall_state.stat.exists
+
+- name: Build current managed firewall rules
+  ansible.builtin.set_fact:
+    megaproxy_firewall_rules: >-
+      {{ (megaproxy_allowed_ports | map('regex_replace', '$', '/tcp') | list)
+         + (megaproxy_allowed_udp_ports | map('regex_replace', '$', '/udp') | list) }}
+    megaproxy_previous_firewall_rules: >-
+      {{ (megaproxy_firewall_previous.content | b64decode | from_json)
+         if megaproxy_firewall_state.stat.exists else [] }}
+
+- name: Revoke retired managed firewall rules
+  ansible.builtin.command:
+    argv: [ufw, --force, delete, allow, "{{ item }}"]
+  loop: "{{ megaproxy_previous_firewall_rules | difference(megaproxy_firewall_rules) }}"
+  register: megaproxy_ufw_delete
+  changed_when: "'Rule deleted' in megaproxy_ufw_delete.stdout"
+
+- name: Create private managed firewall state directory
+  ansible.builtin.file:
+    path: /etc/megaproxy
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Remember managed firewall ports
+  ansible.builtin.copy:
+    dest: /etc/megaproxy/firewall.json
+    content: "{{ megaproxy_firewall_rules | to_json }}\n"
+    owner: root
+    group: root
+    mode: "0600"
 
 - name: Read firewall policy
   ansible.builtin.command: ufw status verbose
