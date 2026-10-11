@@ -14,7 +14,7 @@ from jsonschema import Draft202012Validator
 
 from .config_api import AccessDenied, MAX_RESPONSE, credential_bytes, derive_key, render_config, unlock, user_id
 from .export import _secret
-from .inventory import ROOT, https_routes
+from .inventory import ROOT, https_jump_routes, https_profile_routes, https_routes, ssh_jump_routes
 from .models import ConfigApiService, Inventory
 
 
@@ -53,6 +53,8 @@ def validate_profile_options(options: dict[str, Any]) -> None:
 
 def build_bundle(inventory: Inventory, previous: dict[str, Any] | None = None) -> dict[str, Any]:
     bundle: dict[str, Any] = {"version": 1, "https_routes": [], "socks5_hosts": [], "ssh_hosts": [], "users": {}, "urls": []}
+    bundle["https_jump_pairs"] = https_jump_routes(inventory)
+    ssh_jump_hosts = {name for pair in inventory.settings.ssh_jump_pairs for name in (pair.entry, pair.exit)}
     https_options, ssh_options = {}, {}
     for name, host in inventory.hosts.items():
         api = host.services.config_api
@@ -75,7 +77,7 @@ def build_bundle(inventory: Inventory, previous: dict[str, Any] | None = None) -
                 bundle["https_routes"].append({
                     "host_name": name, "route_name": route["name"],
                     "host": route["hostname"], "port": https.port,
-                    "title": route["title"] if route["name"] != "direct" or https.title else name,
+                    "title": route["title"],
                     "country_code": route["country_code"] if re.fullmatch(r"[A-Z]{2}", route["country_code"]) else "",
                     "allow_invalid_certificate": https.certificate == "self-signed",
                     "http3_port": route["http3_port"],
@@ -84,10 +86,14 @@ def build_bundle(inventory: Inventory, previous: dict[str, Any] | None = None) -
             if https.socks5.enabled:
                 bundle["socks5_hosts"].append({"name": name, "host": https.endpoint, "port": https.socks5.port})
         ssh = host.services.ssh
-        if ssh and ssh.enabled:
+        if ssh and ssh.enabled and (ssh.generate_profile or name in ssh_jump_hosts):
             validate_profile_options(ssh.client_profile)
-            bundle["ssh_hosts"].append({"name": name, "address": host.address, "port": ssh.port})
+            bundle["ssh_hosts"].append({"name": name, "address": host.address, "port": ssh.port,
+                                        "title": ssh.title,
+                                        "generate_profile": ssh.generate_profile})
             ssh_options[name] = ssh.client_profile
+    route_order = {(name, route["name"]): index for index, (name, route) in enumerate(https_profile_routes(inventory))}
+    bundle["https_routes"].sort(key=lambda route: route_order[(route["host_name"], route["route_name"])])
     accounts = {user.name: user for user in inventory.users.ssh}
     for user in inventory.users.https:
         overrides = dict(inventory.settings.client_config, **user.client_config)
@@ -112,6 +118,7 @@ def build_bundle(inventory: Inventory, previous: dict[str, Any] | None = None) -
                 if not names.issubset(user.ssh_users):
                     raise ValueError("Additional SSH profiles must use explicitly linked SSH accounts")
         payload = {"ssh_accounts": [], "client_config": overrides, "https_options": https_options, "ssh_options": ssh_options}
+        payload["ssh_jump_pairs"] = ssh_jump_routes(inventory)
         if bundle["ssh_hosts"]:
             for name in user.ssh_users:
                 account = accounts[name]

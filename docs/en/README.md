@@ -141,15 +141,104 @@ matched automatically. Unknown accounts and duplicates fail inventory validation
 may be linked to multiple HTTPS users; removing an SSH account also removes its links. These links
 provide metadata for personalized delivery; the current `export` and `configs` commands still export all users.
 
+### SSH service and profile selection
+
+`services.ssh.enabled` defaults to true and controls SSH proxy provisioning and verification.
+`services.ssh.generate_profile` defaults to false and selects hosts for direct SSH profiles in
+`export`, `configs` and the configuration API. Administrative SSH uses `admin` settings separately.
+
+| enabled | generate_profile | Result |
+| --- | --- | --- |
+| true | true | Provision SSH proxy users and publish direct SSH profiles |
+| true | false | Provision SSH proxy users; use the host only in declared jump pairs |
+| false | any | Skip SSH proxy provisioning/verification and profile generation; jump pairs cannot reference this host |
+
+Setting `enabled: false` skips the role; it does not remove previously provisioned accounts or
+stop the server's SSH daemon. To revoke an account, use `remove-users` and `apply`.
+
+```yaml
+hosts:
+  de_proxy:
+    # address and admin as in inventory.example.yml
+    services:
+      ssh:
+        title: DE
+        enabled: true
+        generate_profile: true
+```
+
+Direct SSH titles use the required `services.ssh.title` field.
+The API omits the login; file exports append ` / login`, as for HTTPS.
+
+### Explicit client-side jump pairs
+
+```yaml
+settings:
+  ssh_jump_pairs:
+    - entry: de_proxy
+      exit: us_proxy
+      title: SSH DE -> US
+      country_code: US
+  https_jump_pairs:
+    - entry: de_proxy
+      exit: us_proxy
+      title: HTTPS DE -> US
+      country_code: US
+```
+
+`entry` is the first hop; `exit` is the destination. SSH Jump uses the same account from
+`users.ssh` on both hops. `export` and `configs` generate one profile per SSH account;
+the API uses only accounts linked through the HTTPS user's `ssh_users`. No per-hop login
+is configured in a pair. Both SSH services must be enabled, but `generate_profile` may be false.
+HTTPS Jump uses the current HTTPS user's credentials on both hops and requires two enabled
+direct HTTPS endpoints. It does not require `https_chains_enabled` or a chain domain.
+
+For both jump lists, `title` is required and `country_code` is optional.
+The country defaults to the exit's code. An explicit country must
+be two uppercase letters. Empty lists create no jump profiles; no combinations are inferred.
+Unknown hosts, disabled services, repeated pairs and identical entry/exit hosts fail validation.
+`./mega-proxy jumps` lists configured SSH pairs for each account. The legacy `--all-jumps`
+export flag is accepted but never enables undeclared pairs.
+
+See [inventory.jumps.example.yml](../../inventory.jumps.example.yml) for a complete example.
+`https_chain_pairs` is separate: it creates server-side SNI routes with individual hostnames,
+exported as ordinary HTTPS profiles. See [inventory.chains.example.yml](../../inventory.chains.example.yml).
+
+### Profile order
+
+The API and MegaProxy JSON list direct HTTPS, direct SSH, `https_chain_pairs`,
+`https_jump_pairs`, then `ssh_jump_pairs`. Direct profiles follow inventory host order;
+pairs follow their respective list order. MASQUE and SOCKS5 belong to the first group.
+Reordering preserves IDs. FoxyProxy, SuperProxy and ProxyList list direct HTTPS routes
+first, then server-side chains.
+
+### Profile names and countries
+
+HTTPS and SSH services and all chain/jump pairs require a nonblank `title`.
+Names are read directly from inventory; no names are derived from host identifiers.
+
 For country flags, start host identifiers with a two-letter country code followed by `_`, such as
 `de_entry` and `us_exit`. Explicit HTTPS chain pairs supply the exit country in `country_code`.
 The code is a display hint; use the client connection test to check the observed exit country.
-Give exported profiles distinct names: their IDs are derived from those names.
+HTTPS and jump profile IDs use logical host/route identifiers and the account, so changing a
+title or endpoint preserves those IDs. Direct SSH IDs also use the host and account. SOCKS5 exports still derive IDs from their names.
 
-An empty `https_chain_pairs` enables all compatible directed entry/exit combinations; a non-empty
-list limits routes to the declared pairs. Each exit needs separate machine credentials in
-`chain_password`, which are excluded from client exports. Chain titles use the pair title, then
-the entry service title, then a name derived from the inventory host identifier.
+`https_chain_pairs` creates only declared entry/exit routes; an empty list creates no server-side
+chains. Each exit needs separate machine credentials in
+`chain_password`, which are excluded from client exports. Chain titles use the required pair `title`.
+
+Set a knock host per HTTPS proxy using `services.https.probe_resistance.knock`:
+```yaml
+probe_resistance:
+  enabled: true
+  mode: local_decoy
+  knock: [px-knock.jethelix.ru]
+```
+The first host becomes `browser.knockHost` in API and MegaProxy file profiles.
+Chain routes inherit the entry setting unless the pair overrides `probe_resistance`.
+The setup wizard asks for the knock hostname when probe resistance is enabled.
+Apply HTTPS settings to the proxy hosts and update the config API bundle after changing it.
+MASQUE profiles do not use knock hosts.
 
 Probe resistance suppresses the normal authentication challenge and can break browser clients
 that wait for `407` before sending credentials. Keep it disabled unless tested with the required
@@ -184,7 +273,7 @@ clients to allow an invalid proxy certificate.
 
 The default `.generated/configs` directory contains:
 
-- `MegaProxy.json`: HTTPS, direct SSH and every dynamic SSH jump profile;
+- `MegaProxy.json`: HTTPS, direct SSH for hosts with `services.ssh.generate_profile: true`, and explicitly configured SSH/HTTPS jump profiles;
 - `FoxyProxy.json`: HTTPS profiles;
 - `SuperProxy.txt`: HTTPS URLs with the Super Proxy v1 header;
 - `ProxyList.txt`: URL-encoded HTTPS proxy URLs.
@@ -200,12 +289,10 @@ equal peers. See the [inventory example](../../inventory.config-api.example.yml)
 verification, password-encrypted SSH secrets, client projections, bootstrap subscriptions and
 authenticated ETags. `/robots.txt` is public; other paths and invalid credentials return 403.
 
-Compatibility was reviewed on 2026-09-08 against AndroidMegaProxy
-[revision c8190e9](https://github.com/andre487/AndroidMegaProxy/tree/c8190e97b705a2c4578d278c40a690e97c5d5f27).
-The client [importer](https://github.com/andre487/AndroidMegaProxy/blob/c8190e97b705a2c4578d278c40a690e97c5d5f27/app/src/main/java/net/megaproxy487/data/ConfigTransfer.kt)
-accepts the JSON produced by this repository's [exporter](../../src/megaproxy_server/export.py):
-the server currently writes schema `net.megaproxy487.config` v7; the app writes v8 and reads v1–v8.
-Changing the server's version number alone would not add HTTPS jump profiles.
+The [exporter](../../src/megaproxy_server/export.py) writes schema `net.megaproxy487.config`
+v7 for basic HTTPS/SSH profiles and v8 when `https_jump_pairs`, HTTP/3 or SOCKS5 is configured.
+MASQUE profiles require HTTP/3. The configuration API always returns canonical v8 and filters
+profiles for the requested client; browser projections omit SSH, jump and MASQUE profiles.
 
 ### Import and connect
 
@@ -232,9 +319,11 @@ cannot carry that setting. Prefer ACME certificates for normal operation.
 ### Updating imported profiles
 
 Repeat `configs` after server or credential changes, then reimport the JSON. Matching IDs update
-existing profiles; new IDs add profiles. IDs remain stable while generated profile names remain
-unchanged. Renaming a host, login or HTTPS title can change IDs. Distinct routes must not share the
-same generated name: duplicate IDs are rejected by the Android importer.
+existing profiles; new IDs add profiles. Generated HTTPS, MASQUE and jump IDs depend on logical
+host/route identifiers and accounts; changing their title, country or endpoint preserves IDs.
+Renaming an inventory host or account changes those IDs. Direct SSH IDs also use logical host/account identifiers. SOCKS5 exports derive
+IDs from names; renaming those profiles changes IDs. The API uses logical identities for all
+generated profiles. Additional manual profiles must supply unique IDs.
 
 The app offers optional removal of local profiles missing from the file; they are not deleted
 automatically. Removing a profile on the phone does not revoke access: use `remove-users` and
@@ -251,7 +340,7 @@ empty, reimport can require host-key confirmation again.
 | Route | Setup | What the phone imports |
 | --- | --- | --- |
 | Server-side SNI chain | Configure entry/exit and DNS using the chain inventory example, then apply | An ordinary `HTTPS` profile pointing to the entry's chain hostname; GOST selects the exit |
-| Client-side HTTPS with Jump | Provision two direct HTTPS endpoints, then create **HTTPS with Jump** in the app | Not generated by MegaProxyServer; the app stores it as `HTTPS_JUMP` in JSON v8 |
+| Client-side HTTPS with Jump | Provision two direct HTTPS endpoints and configure `settings.https_jump_pairs` | A `HTTPS_JUMP` profile in JSON v8 |
 
 For **HTTPS with Jump**, enter the exit in the main proxy fields and the entry in **Jump HTTPS
 proxy**. Use global HTTPS user credentials on each hop; machine `chain_password` credentials belong
@@ -262,7 +351,8 @@ Each hop verifies its own certificate. This mode does not require a chain domain
 See the client's [HTTPS with Jump guide](https://github.com/andre487/AndroidMegaProxy#https-with-jump).
 Client-side HTTPS jump profiles require a v8-capable app; older clients reject v8 files. Server-side
 SNI routes remain usable through the HTTPS-only export formats. SSH jump profiles are generated by
-`configs`; for a separate JSON export, request them with `./mega-proxy export --all-jumps`.
+`configs` and `export` from `settings.ssh_jump_pairs`. Both jump lists default to empty;
+`--all-jumps` is a compatibility flag and never generates undeclared combinations.
 
 ### Client limits and diagnostics
 

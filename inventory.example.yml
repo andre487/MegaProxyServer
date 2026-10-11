@@ -44,7 +44,10 @@ hosts:
           enabled: false
           mode: disabled
           site_title: Personal site
+          # Set a hostname when enabling probe resistance; the first host is exported as browser.knockHost.
           knock: []
       ssh:
+        title: EU
         enabled: true
+        generate_profile: true
         port: 22

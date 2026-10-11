@@ -153,6 +153,7 @@ def create_inventory(path: Path = DEFAULT_INVENTORY, existing: Inventory | None 
             certificate = questionary.select("Certificate type", choices=[questionary.Choice("ACME domain certificate", "domain"), questionary.Choice("ACME public IP certificate", "ip-acme"), questionary.Choice("Self-signed (expert, weaker)", "self-signed")], default="ip-acme" if _is_ip(endpoint) else "domain").ask()
             email = None if certificate == "self-signed" else ask_required("ACME email")
             probe = questionary.confirm("Enable active-probe resistance? This may break browser proxy authentication.", default=False).ask()
+            knock = [ask_required("Knock host (hostname without https://)")] if probe else []
             http3 = bool(questionary.confirm("Enable HTTP/3 (MASQUE) on the direct HTTPS endpoint?", default=False).ask())
             masque_profiles = http3 and bool(questionary.confirm("Publish separate MASQUE profiles in configuration subscriptions?", default=False).ask())
             chain_entry = chains_enabled and bool(questionary.confirm("Use this host as an HTTPS chain entry?", default=True).ask())
@@ -161,13 +162,14 @@ def create_inventory(path: Path = DEFAULT_INVENTORY, existing: Inventory | None 
                 print("These HTTPS users will be configured on every HTTPS-enabled host.")
                 global_https_users = ask_users("HTTPS", "all-hosts")
             https = HttpsService(
+                title=ask_required("HTTPS profile title", name),
                 endpoint=endpoint,
                 http3=http3,
                 masque_profiles=masque_profiles,
                 certificate=certificate,
                 acme_email=email,
                 users=global_https_users,
-                probe_resistance=ProbeResistance(enabled=bool(probe), mode="local_decoy" if probe else "disabled"),
+                probe_resistance=ProbeResistance(enabled=bool(probe), mode="local_decoy" if probe else "disabled", knock=knock),
                 chain_entry=chain_entry,
                 chain_exit=chain_exit,
                 chain_password=random_password() if chain_exit else None,
@@ -177,6 +179,7 @@ def create_inventory(path: Path = DEFAULT_INVENTORY, existing: Inventory | None 
                 print("These SSH proxy users will be configured on every SSH-enabled host.")
                 global_ssh_users = ask_users("SSH", "all-hosts", {admin_user} | {host.admin.user for host in hosts.values()})
             ssh = SshService(
+                title=ask_required("SSH profile title", https.title if https else name),
                 port=int(ask_required("SSH proxy port", str(admin_port))),
                 users=global_ssh_users,
             )

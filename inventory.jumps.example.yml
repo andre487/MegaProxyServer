@@ -1,0 +1,60 @@
+version: 1
+settings:
+  # Client-side jumps; no server-side chain domain is required.
+  ssh_jump_pairs:
+    - entry: de_proxy
+      exit: us_proxy
+      title: SSH DE -> US
+      country_code: US
+  https_jump_pairs:
+    - entry: de_proxy
+      exit: us_proxy
+      title: HTTPS DE -> US
+      country_code: US
+users:
+  https:
+    - name: alice
+      password: REPLACE_WITH_AT_LEAST_16_CHARACTERS
+      ssh_users: [mp-alice]
+  ssh:
+    - name: mp-alice
+      authentication:
+        type: key
+        public_key: ssh-ed25519 REPLACE_WITH_PUBLIC_KEY MegaProxy
+        generated_private_key: ~/.ssh/megaproxy_alice
+hosts:
+  de_proxy:
+    address: 203.0.113.10
+    admin:
+      user: deploy
+      bootstrap_user: root
+      private_key_file: ~/.ssh/id_ed25519
+      public_key: ssh-ed25519 REPLACE_WITH_ADMIN_PUBLIC_KEY
+    services:
+      https:
+        endpoint: de.example.com
+        title: DE
+        certificate: domain
+        acme_email: admin@example.com
+      ssh:
+        title: DE
+        enabled: true
+        # This host is available for Jump, without a separate direct SSH profile.
+        generate_profile: false
+  us_proxy:
+    address: 203.0.113.20
+    admin:
+      user: deploy
+      bootstrap_user: root
+      private_key_file: ~/.ssh/id_ed25519
+      public_key: ssh-ed25519 REPLACE_WITH_ADMIN_PUBLIC_KEY
+    services:
+      https:
+        endpoint: us.example.com
+        title: US
+        certificate: domain
+        acme_email: admin@example.com
+      ssh:
+        title: US
+        enabled: true
+        generate_profile: true

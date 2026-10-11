@@ -174,6 +174,7 @@ def main():
             inv = Inventory.model_validate({"users": {"https": [{"name": USERNAME, "password": PASSWORD}]},
                 "settings": {"https_chain_backend_port": backend},
                 "hosts": {"entry": {"address": "127.0.0.1", "admin": admin, "services": {"https": {
+                    "title": "HTTPS",
                     "endpoint": "localhost", "port": entry_port, "certificate": "domain", "acme_email": "test@example.com", "http3": True,
                     "socks5": {"enabled": True, "port": socks_port, "udp_port_min": 40000, "udp_port_max": 40100}}}}}})
             variables = ansible_inventory(inv)["all"]["hosts"]

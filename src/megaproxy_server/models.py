@@ -57,7 +57,7 @@ class Socks5Options(BaseModel):
 class HttpsService(BaseModel):
     enabled: bool = True
     endpoint: str
-    title: str | None = None
+    title: str = Field(min_length=1, pattern=r"\S")
     port: Port = 443
     http3: bool = False
     masque_profiles: bool = False
@@ -119,6 +119,8 @@ class SshUser(BaseModel):
 
 class SshService(BaseModel):
     enabled: bool = True
+    generate_profile: bool = False
+    title: str = Field(min_length=1, pattern=r"\S")
     port: Port = 22
     users: list[SshUser] = Field(min_length=1)
     removed_users: list[str] = Field(default_factory=list)
@@ -215,8 +217,22 @@ class HttpsChainPair(BaseModel):
     exit: str
     country_code: str = Field(pattern=r"^[A-Z]{2}$")
     hostname: str | None = None
-    title: str | None = None
+    title: str = Field(min_length=1, pattern=r"\S")
     probe_resistance: ProbeResistance | None = None
+
+
+class SshJumpPair(BaseModel):
+    entry: str
+    exit: str
+    title: str = Field(min_length=1, pattern=r"\S")
+    country_code: str | None = Field(default=None, pattern=r"^[A-Z]{2}$")
+
+
+class HttpsJumpPair(BaseModel):
+    entry: str
+    exit: str
+    title: str = Field(min_length=1, pattern=r"\S")
+    country_code: str | None = Field(default=None, pattern=r"^[A-Z]{2}$")
 
 
 class Settings(BaseModel):
@@ -226,6 +242,8 @@ class Settings(BaseModel):
     https_chain_domain: str | None = None
     https_chain_backend_port: Port = 10443
     https_chain_pairs: list[HttpsChainPair] = Field(default_factory=list)
+    ssh_jump_pairs: list[SshJumpPair] = Field(default_factory=list)
+    https_jump_pairs: list[HttpsJumpPair] = Field(default_factory=list)
     client_config: dict[str, Any] = Field(default_factory=dict)
 
     @model_validator(mode="after")
@@ -315,6 +333,34 @@ class Inventory(BaseModel):
         if len(api_endpoints) != len(set(api_endpoints)):
             raise ValueError("config API endpoints must be unique")
         ssh_names = {user.name for user in self.users.ssh}
+        seen_https_jumps = set()
+        for pair in self.settings.https_jump_pairs:
+            identity = (pair.entry, pair.exit)
+            if identity in seen_https_jumps:
+                raise ValueError("duplicate HTTPS jump pair")
+            seen_https_jumps.add(identity)
+            if pair.entry == pair.exit:
+                raise ValueError("HTTPS jump entry and exit must differ")
+            for name in identity:
+                if name not in self.hosts:
+                    raise ValueError(f"unknown host in HTTPS jump pair: {name!r}")
+                service = self.hosts[name].services.https
+                if not service or not service.enabled or not service.direct:
+                    raise ValueError(f"HTTPS jump host {name!r} must have an enabled direct endpoint")
+        seen_jumps = set()
+        for pair in self.settings.ssh_jump_pairs:
+            identity = (pair.entry, pair.exit)
+            if identity in seen_jumps:
+                raise ValueError("duplicate SSH jump pair")
+            seen_jumps.add(identity)
+            if pair.entry == pair.exit:
+                raise ValueError("SSH jump entry and exit must differ")
+            for name in identity:
+                if name not in self.hosts:
+                    raise ValueError(f"unknown host in SSH jump pair: {name!r}")
+                service = self.hosts[name].services.ssh
+                if not service or not service.enabled:
+                    raise ValueError(f"SSH jump host {name!r} is not enabled")
         for kind in ("https", "ssh"):
             names = [user.name for user in getattr(self.users, kind)]
             if len(names) != len(set(names)):
@@ -337,7 +383,12 @@ class Inventory(BaseModel):
                     raise ValueError("HTTPS chain hosts require domain ACME certificates")
                 if https.chain_exit and not https.chain_password:
                     raise ValueError("every HTTPS chain exit requires chain_password")
+            seen_pairs = set()
             for pair in self.settings.https_chain_pairs:
+                identity = (pair.entry, pair.exit)
+                if identity in seen_pairs:
+                    raise ValueError("duplicate HTTPS chain pair")
+                seen_pairs.add(identity)
                 if pair.entry == pair.exit:
                     raise ValueError("HTTPS chain entry and exit must differ")
                 if pair.entry not in self.hosts or pair.exit not in self.hosts:

@@ -8,12 +8,12 @@ def test_remove_https_and_ssh_users() -> None:
             address="192.0.2.1",
             admin=AdminAccess(user="deploy", private_key_file="/keys/admin", public_key="ssh-ed25519 AAAA admin"),
             services=Services(
-                https=HttpsService(
+                https=HttpsService(title='HTTPS',
                     endpoint="proxy.example",
                     certificate="self-signed",
                     users=[HttpsUser(name="alice", password="long-password-alice", ssh_users=["mp-alice"]), HttpsUser(name="bob", password="long-password-bob", ssh_users=["mp-alice", "mp-bob"])],
                 ),
-                ssh=SshService(users=[
+                ssh=SshService(title='SSH', users=[
                     SshUser(name="mp-alice", authentication=SshAuthentication(type="key", public_key="ssh-ed25519 AAAA alice")),
                     SshUser(name="mp-bob", authentication=SshAuthentication(type="key", public_key="ssh-ed25519 AAAA bob")),
                 ]),

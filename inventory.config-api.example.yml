@@ -23,6 +23,7 @@ hosts:
       public_key: ssh-ed25519 REPLACE_WITH_ADMIN_PUBLIC_KEY
     services:
       https:
+        title: DE
         endpoint: proxy.example.com
         certificate: domain
         acme_email: admin@example.com

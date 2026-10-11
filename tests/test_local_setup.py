@@ -15,7 +15,7 @@ def local_inventory():
             'address': '192.0.2.1', 'local': True,
             'admin': {'user': 'deploy', 'bootstrap_user': 'root',
                       'private_key_file': '/keys/admin', 'public_key': 'ssh-ed25519 AAAA'},
-            'services': {'https': {'endpoint': '192.0.2.1', 'certificate': 'self-signed',
+            'services': {'https': {'title': 'HTTPS', 'endpoint': '192.0.2.1', 'certificate': 'self-signed',
                                   'users': [{'name': 'alice', 'password': 'long-test-password'}]}},
         }},
     })
@@ -86,19 +86,22 @@ def test_setup_resume_confirmation_and_failure(monkeypatch, tmp_path, confirm, b
     assert known.stat().st_mode & 0o777 == 0o600
 
 
-def test_local_wizard_skips_remote_bootstrap_questions(monkeypatch, tmp_path):
+@pytest.mark.parametrize("probe", [False, True])
+def test_local_wizard_skips_remote_bootstrap_questions(monkeypatch, tmp_path, probe):
     answers = {
         'Inventory host name (for example proxy_eu)': 'local_proxy',
         'Public IP address or DNS name': '192.0.2.1',
         'Permanent administrative user to create or update': 'deploy',
         'Administrative SSH port': '22',
         'HTTPS endpoint': '192.0.2.1',
+        'HTTPS profile title': 'LOCAL',
+        'Knock host (hostname without https://)': 'knock.example',
     }
     monkeypatch.setattr(wizard, 'ask_required', lambda message, default=None: answers[message])
     selections = {'Administrative SSH key': 'Generate a dedicated key', 'Certificate type': 'self-signed'}
     monkeypatch.setattr(wizard.questionary, 'select', lambda message, **kwargs: SimpleNamespace(ask=lambda: selections[message]))
     monkeypatch.setattr(wizard.questionary, 'checkbox', lambda *args, **kwargs: SimpleNamespace(ask=lambda: ['https']))
-    monkeypatch.setattr(wizard.questionary, 'confirm', lambda message, **kwargs: SimpleNamespace(ask=lambda: False))
+    monkeypatch.setattr(wizard.questionary, 'confirm', lambda message, **kwargs: SimpleNamespace(ask=lambda: probe if message.startswith('Enable active-probe resistance?') else False))
     monkeypatch.setattr(wizard, 'generate_key', lambda *args: ('ssh-ed25519 AAAA', tmp_path / 'key'))
     monkeypatch.setattr(wizard, 'ask_users', lambda *args: local_inventory().users.https)
     monkeypatch.setattr(wizard, 'save', lambda *args, **kwargs: None)
@@ -108,6 +111,9 @@ def test_local_wizard_skips_remote_bootstrap_questions(monkeypatch, tmp_path):
     assert inv.hosts['local_proxy'].admin.bootstrap_user == 'root'
     assert inv.hosts['local_proxy'].admin.bootstrap_auth == 'key'
     assert not inv.settings.https_chains_enabled
+    resistance = inv.hosts['local_proxy'].services.https.probe_resistance
+    assert resistance.enabled is probe
+    assert resistance.knock == (['knock.example'] if probe else [])
 
 
 def test_setup_rejects_non_root_and_remote_inventory(monkeypatch, tmp_path):

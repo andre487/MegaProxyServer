@@ -13,7 +13,7 @@ from megaproxy_server import config_api, config_bundle
 from megaproxy_server.config_api import AccessDenied, render_config, serve, user_id
 from megaproxy_server.config_bundle import build_bundle, public_url, validate_config, write_bundle
 from megaproxy_server.inventory import ansible_inventory, write_ansible_inventory
-from megaproxy_server.models import ConfigApiService, Inventory
+from megaproxy_server.models import ConfigApiService, Inventory, ProbeResistance
 
 
 @pytest.fixture
@@ -28,12 +28,12 @@ def inventory(tmp_path, monkeypatch):
     admin = {"user": "deploy", "private_key_file": "/secret/admin-key", "public_key": "ssh-ed25519 ADMIN"}
     hosts = {
         "de_entry": {"address": "192.0.2.1", "admin": admin, "services": {
-            "https": {"endpoint": "entry.example", "certificate": "domain", "acme_email": "a@example.com",
+            "https": {"title": "DE ENTRY", "endpoint": "entry.example", "certificate": "domain", "acme_email": "a@example.com",
                       "chain_entry": True, "probe_resistance": {"enabled": True, "knock": ["knock.example"]}},
-            "ssh": {}}},
+            "ssh": {"title": "DE ENTRY", "generate_profile": True}}},
         "us_exit": {"address": "192.0.2.2", "admin": admin, "services": {
-            "https": {"endpoint": "exit.example", "certificate": "domain", "acme_email": "a@example.com",
-                      "chain_exit": True, "chain_password": "machine-chain-secret"}, "ssh": {}}},
+            "https": {"title": "US EXIT", "endpoint": "exit.example", "certificate": "domain", "acme_email": "a@example.com",
+                      "chain_exit": True, "chain_password": "machine-chain-secret"}, "ssh": {"title": "US EXIT", "generate_profile": True}}},
         "configs_one": {"address": "192.0.2.3", "admin": admin, "services": {
             "config_api": {"endpoint": "configs.example", "acme_email": "a@example.com"}}},
         "configs_two": {"address": "2001:db8::4", "admin": admin, "services": {
@@ -45,7 +45,27 @@ def inventory(tmp_path, monkeypatch):
         "ssh": [{"name": "tun-alice", "authentication": {"type": "key", "public_key": "ssh-ed25519 ALICE", "generated_private_key": str(key)}},
                 {"name": "tun-db", "authentication": {"type": "password", "password": "ssh-password-secret", "password_hash": "$6$test-hash"}},
                 {"name": "tun-bob", "authentication": {"type": "key", "public_key": "ssh-ed25519 BOB"}}]},
-        "settings": {"https_chains_enabled": True, "https_chain_domain": "chains.example"}})
+        "settings": {"https_chains_enabled": True, "https_chain_domain": "chains.example",
+                     "https_chain_pairs": [{"entry": "de_entry", "exit": "us_exit", "country_code": "US", "title": "DE ENTRY"}],
+                     "ssh_jump_pairs": [{"entry": "de_entry", "exit": "us_exit", "title": "DE ENTRY -> US EXIT"}]}})
+
+
+
+@pytest.mark.parametrize("target", ["https", "ssh", "https_chain_pairs", "https_jump_pairs", "ssh_jump_pairs"])
+@pytest.mark.parametrize("value", [None, "", "   ", "missing"])
+def test_profile_titles_must_be_explicit_and_nonblank(inventory, target, value):
+    raw = inventory.model_dump()
+    if target in {"https", "ssh"}:
+        item = raw["hosts"]["de_entry"]["services"][target]
+    else:
+        item = {"entry": "de_entry", "exit": "us_exit", "country_code": "US"}
+        raw["settings"][target] = [item]
+    if value == "missing":
+        item.pop("title", None)
+    else:
+        item["title"] = value
+    with pytest.raises(ValueError, match="title"):
+        Inventory.model_validate(raw)
 
 
 def test_production_kdf_parameters():
@@ -64,7 +84,7 @@ def test_generated_transports_are_opt_in_and_client_compatible(inventory, tmp_pa
     document = render_config(bundle, alice.name, alice.password)
     https = [p["proxy"] for p in document["profiles"] if p["proxy"]["type"] == "HTTPS"]
     assert https[0]["preferHttp3"] is True
-    assert "preferHttp3" not in https[1]  # Never bypass a server-side chain via direct QUIC.
+    assert "preferHttp3" not in https[2]  # Never bypass a server-side chain via direct QUIC.
     assert all(p["proxy"]["type"] != "MASQUE" for p in document["profiles"])
     assert sum(p["proxy"]["type"] == "SOCKS5" for p in document["profiles"]) == 1
     entry.masque_profiles = True
@@ -72,6 +92,7 @@ def test_generated_transports_are_opt_in_and_client_compatible(inventory, tmp_pa
     document = render_config(bundle, alice.name, alice.password)
     masque = [p for p in document["profiles"] if p["proxy"]["type"] == "MASQUE"]
     assert len(masque) == 1
+    assert masque[0]["name"] == "DE ENTRY MASQUE"
     assert all("browser" not in p and "preferHttp3" not in p["proxy"] for p in masque)
     assert masque[0]["proxy"]["password"] == alice.password
     firefox = render_config(bundle, alice.name, alice.password, "browser_firefox")
@@ -83,6 +104,7 @@ def test_generated_transports_are_opt_in_and_client_compatible(inventory, tmp_pa
     Draft202012Validator(json.loads((config_bundle.ROOT / "schemas/android-v8.schema.json").read_text())).validate(android)
     from megaproxy_server.export import export_profiles
     exported_inventory = inventory.model_copy(deep=True)
+    exported_inventory.settings.ssh_jump_pairs = []
     for host in exported_inventory.hosts.values():
         host.services.ssh = None
     path = tmp_path / "export.json"
@@ -93,10 +115,182 @@ def test_generated_transports_are_opt_in_and_client_compatible(inventory, tmp_pa
     assert {p["proxy"]["type"] for p in exported["profiles"]} >= {"SOCKS5", "MASQUE"}
 
 
+
+def test_knock_host_reaches_api_and_export_routes_without_affecting_masque(inventory, tmp_path):
+    from megaproxy_server.export import export_profiles
+    raw = inventory.model_dump()
+    raw["users"]["ssh"] = raw["users"]["ssh"][:2]
+    raw["settings"]["https_jump_pairs"] = [
+        {"entry": "de_entry", "exit": "us_exit", "title": "Jump"}]
+    inventory = Inventory.model_validate(raw)
+    entry = inventory.hosts["de_entry"].services.https
+    entry.http3 = entry.masque_profiles = True
+    inventory.settings.https_chain_pairs[0].probe_resistance = ProbeResistance(
+        enabled=True, knock=["chain-knock.example"])
+    inventory = Inventory.model_validate(inventory.model_dump())
+    user = inventory.users.https[0]
+    api = render_config(build_bundle(inventory), user.name, user.password)
+    path = tmp_path / "export.json"
+    export_profiles(inventory, path)
+    exported = json.loads(path.read_text())
+    for document in (api, exported):
+        validate_config(document)
+        https = [p for p in document["profiles"]
+                 if p["proxy"]["type"] == "HTTPS" and p["proxy"]["username"] == user.name]
+        assert [p.get("browser", {}).get("knockHost") for p in https] == [
+            "knock.example", None, "chain-knock.example"]
+        assert all("knockHost" not in p.get("browser", {}) for p in document["profiles"]
+                   if p["proxy"]["type"] == "MASQUE")
+
+
 def test_http3_flag_cannot_be_advertised_without_a_listener(inventory):
     inventory.hosts["de_entry"].services.https.client_profile = {"proxy": {"preferHttp3": True}}
     with pytest.raises(ValueError, match="preferHttp3 requires HTTP/3"):
         build_bundle(inventory)
+
+
+def test_profile_order_groups_direct_hosts_then_pairs_in_inventory_order(inventory, tmp_path):
+    raw = inventory.model_dump()
+    raw["users"]["ssh"] = raw["users"]["ssh"][:2]
+    raw["hosts"]["de_entry"]["services"]["https"].update(chain_exit=True, chain_password="chain-password-long")
+    raw["hosts"]["us_exit"]["services"]["https"]["chain_entry"] = True
+    pairs = [{"entry": "us_exit", "exit": "de_entry", "title": "US EXIT -> DE ENTRY"}, {"entry": "de_entry", "exit": "us_exit", "title": "DE ENTRY -> US EXIT"}]
+    raw["settings"]["ssh_jump_pairs"] = pairs
+    raw["settings"]["https_jump_pairs"] = pairs
+    raw["settings"]["https_chain_pairs"] = [
+        dict(pairs[0], country_code="DE", hostname="first-chain.example"),
+        dict(pairs[1], country_code="US", hostname="second-chain.example"),
+    ]
+    inventory = Inventory.model_validate(raw)
+    alice = inventory.users.https[0]
+    document = render_config(build_bundle(inventory), alice.name, alice.password)
+    expected = [
+        ("HTTPS", "entry.example"), ("HTTPS", "exit.example"),
+        ("SSH", "192.0.2.1"), ("SSH", "192.0.2.1"),
+        ("SSH", "192.0.2.2"), ("SSH", "192.0.2.2"),
+        ("HTTPS", "first-chain.example"), ("HTTPS", "second-chain.example"),
+        ("HTTPS_JUMP", "entry.example"), ("HTTPS_JUMP", "exit.example"),
+        ("SSH_JUMP", "192.0.2.1"), ("SSH_JUMP", "192.0.2.1"),
+        ("SSH_JUMP", "192.0.2.2"), ("SSH_JUMP", "192.0.2.2"),
+    ]
+    assert [(p["proxy"]["type"], p["proxy"]["host"]) for p in document["profiles"]] == expected
+    assert [p["color"] for p in document["profiles"]] == list(range(len(expected)))
+    from megaproxy_server.export import export_profiles
+    output = tmp_path / "export.json"
+    export_profiles(inventory, output)
+    exported = json.loads(output.read_text())
+    assert [(p["proxy"]["type"], p["proxy"]["host"]) for p in exported["profiles"]
+            if p["proxy"]["username"] != "bob"] == expected
+    assert [p["color"] for p in exported["profiles"]] == list(range(len(exported["profiles"])))
+    from megaproxy_server.generate import https_entries
+    assert [p["host"] for p in https_entries(inventory) if p["username"] == "alice"] == [
+        "entry.example", "exit.example", "first-chain.example", "second-chain.example",
+    ]
+
+
+def test_ssh_profile_flags_select_direct_hosts_without_disabling_jumps(inventory, tmp_path):
+    raw = inventory.model_dump()
+    raw["hosts"]["us_exit"]["services"]["ssh"].pop("generate_profile")
+    raw["users"]["ssh"] = raw["users"]["ssh"][:2]
+    inventory = Inventory.model_validate(raw)
+    assert inventory.hosts["us_exit"].services.ssh.generate_profile is False
+    alice = inventory.users.https[0]
+    document = render_config(build_bundle(inventory), alice.name, alice.password)
+    direct = [p for p in document["profiles"] if p["proxy"]["type"] == "SSH"]
+    assert len(direct) == 2
+    assert all(p["proxy"]["host"] == "192.0.2.1" for p in direct)
+    assert sum(p["proxy"]["type"] == "SSH_JUMP" for p in document["profiles"]) == 2
+    from megaproxy_server.export import export_profiles
+    output = tmp_path / "export.json"
+    export_profiles(inventory, output)
+    exported = json.loads(output.read_text())
+    assert [(p["proxy"]["host"], p["proxy"]["username"]) for p in exported["profiles"]
+            if p["proxy"]["type"] == "SSH"] == [("192.0.2.1", "tun-alice"), ("192.0.2.1", "tun-db")]
+    assert sum(p["proxy"]["type"] == "SSH_JUMP" for p in exported["profiles"]) == 2
+    inventory.hosts["de_entry"].services.ssh.generate_profile = False
+    inventory.settings.ssh_jump_pairs = []
+    inventory.users.ssh[0].authentication.generated_private_key = None
+    bundle = build_bundle(inventory)
+    assert bundle["ssh_hosts"] == []
+    assert all(not p["proxy"]["type"].startswith("SSH")
+               for p in render_config(bundle, alice.name, alice.password)["profiles"])
+
+
+def test_jump_profiles_use_only_declared_pairs_and_linked_accounts(inventory, tmp_path):
+    raw = inventory.model_dump()
+    raw["settings"]["https_jump_pairs"] = [{"entry": "de_entry", "exit": "us_exit", "title": "DE ENTRY -> US EXIT"}]
+    raw["settings"]["ssh_jump_pairs"][0].update(title="SSH via DE", country_code="US")
+    raw["users"]["ssh"][2]["authentication"]["generated_private_key"] = raw["users"]["ssh"][0]["authentication"]["generated_private_key"]
+    inventory = Inventory.model_validate(raw)
+    alice = inventory.users.https[0]
+    bundle = build_bundle(inventory)
+    document = render_config(bundle, alice.name, alice.password)
+    jumps = [p for p in document["profiles"] if p["proxy"]["type"].endswith("_JUMP")]
+    assert [p["proxy"]["type"] for p in jumps] == ["HTTPS_JUMP", "SSH_JUMP", "SSH_JUMP"]
+    https = jumps[0]
+    assert (https["proxy"]["host"], https["proxy"]["jump"]["host"]) == ("exit.example", "entry.example")
+    assert (https["name"], https["countryCode"]) == ("DE ENTRY -> US EXIT", "US")
+    assert https["proxy"]["jump"]["sameAuthentication"] is True
+    for item in jumps[1:]:
+        assert (item["name"], item["countryCode"]) == ("SSH via DE", "US")
+        assert item["proxy"]["username"] == item["proxy"]["jump"]["username"]
+        assert item["proxy"]["jump"]["sameAuthentication"] is True
+    assert [p["proxy"]["type"] for p in render_config(bundle, "bob", inventory.users.https[1].password)["profiles"]] == ["HTTPS"] * 3 + ["HTTPS_JUMP"]
+    assert all(p["proxy"]["type"] == "HTTPS" for p in render_config(bundle, alice.name, alice.password, "browser_firefox")["profiles"])
+    from megaproxy_server.export import export_profiles
+    output = tmp_path / "export.json"
+    export_profiles(inventory, output)
+    exported = json.loads(output.read_text())
+    validate_config(exported)
+    assert sum(p["proxy"]["type"] == "SSH_JUMP" for p in exported["profiles"]) == 3
+    assert all(p["countryCode"] == "US" and p["name"].startswith("SSH via DE / ")
+               for p in exported["profiles"] if p["proxy"]["type"] == "SSH_JUMP")
+    assert sum(p["proxy"]["type"] == "HTTPS_JUMP" for p in exported["profiles"]) == 2
+    alice.ssh_users = ["tun-alice"]
+    restricted = render_config(build_bundle(inventory), alice.name, alice.password)
+    ssh_jumps = [p for p in restricted["profiles"] if p["proxy"]["type"] == "SSH_JUMP"]
+    assert len(ssh_jumps) == 1
+    assert ssh_jumps[0]["proxy"]["username"] == "tun-alice"
+    assert ssh_jumps[0]["proxy"]["jump"]["username"] == "tun-alice"
+    inventory.settings.ssh_jump_pairs = []
+    inventory.settings.https_jump_pairs = []
+    without_jumps = render_config(build_bundle(inventory), alice.name, alice.password)
+    assert all(not p["proxy"]["type"].endswith("_JUMP") for p in without_jumps["profiles"])
+
+
+@pytest.mark.parametrize("kind,pair", [
+    ("ssh_jump_pairs", {"entry": "missing", "exit": "us_exit"}),
+    ("ssh_jump_pairs", {"entry": "de_entry", "exit": "de_entry"}),
+    ("ssh_jump_pairs", {"entry": "de_entry", "exit": "us_exit", "country_code": "invalid"}),
+    ("https_jump_pairs", {"entry": "missing", "exit": "us_exit"}),
+    ("https_jump_pairs", {"entry": "de_entry", "exit": "de_entry"}),
+])
+def test_invalid_jump_pairs_are_rejected(inventory, kind, pair):
+    raw = inventory.model_dump()
+    raw["settings"][kind] = [dict(pair, title="Jump")]
+    with pytest.raises(ValueError):
+        Inventory.model_validate(raw)
+
+
+@pytest.mark.parametrize("kind", ["ssh_jump_pairs", "https_jump_pairs", "https_chain_pairs"])
+def test_duplicate_pairs_are_rejected(inventory, kind):
+    raw = inventory.model_dump()
+    pair = {"entry": "de_entry", "exit": "us_exit", "title": "DE ENTRY -> US EXIT"}
+    if kind == "https_chain_pairs":
+        pair["country_code"] = "US"
+    raw["settings"][kind] = [pair, pair]
+    with pytest.raises(ValueError, match="duplicate"):
+        Inventory.model_validate(raw)
+
+
+@pytest.mark.parametrize("kind,service", [("ssh_jump_pairs", "ssh"), ("https_jump_pairs", "https")])
+def test_jump_hosts_must_be_enabled(inventory, kind, service):
+    raw = inventory.model_dump()
+    if kind == "https_jump_pairs":
+        raw["settings"][kind] = [{"entry": "de_entry", "exit": "us_exit", "title": "DE ENTRY -> US EXIT"}]
+    raw["hosts"]["de_entry"]["services"][service]["enabled"] = False
+    with pytest.raises(ValueError, match="enabled"):
+        Inventory.model_validate(raw)
 
 
 @pytest.mark.parametrize("change", [
@@ -135,7 +329,7 @@ def test_bundle_has_no_plaintext_secrets_and_is_idempotent(inventory, tmp_path):
     alice = inventory.users.https[0]
     document = render_config(bundle, alice.name, alice.password)
     assert document["version"] == 8
-    assert len(document["profiles"]) == 15
+    assert len(document["profiles"]) == 9
     for item in document["profiles"]:
         proxy = item["proxy"]
         assert proxy["username"] in {"alice", "tun-alice", "tun-db"}
@@ -175,6 +369,48 @@ def test_profile_ids_survive_title_and_endpoint_changes(inventory):
     updated = render_config(build_bundle(inventory), alice.name, alice.password)
     assert [item["id"] for item in original["profiles"]] == [item["id"] for item in updated["profiles"]]
     assert original["profiles"][0]["name"] != updated["profiles"][0]["name"]
+
+
+def test_https_titles_do_not_follow_host_names(inventory):
+    inventory.hosts["proxy_de"] = inventory.hosts.pop("de_entry")
+    inventory.settings.https_chain_pairs[0].entry = "proxy_de"
+    inventory.settings.ssh_jump_pairs[0].entry = "proxy_de"
+    inventory.hosts["us_exit"].services.https.title = "US custom title"
+    alice = inventory.users.https[0]
+    document = render_config(build_bundle(inventory), alice.name, alice.password)
+    profiles = [p for p in document["profiles"] if p["proxy"]["type"] == "HTTPS"]
+    assert [(p["name"], p["countryCode"]) for p in profiles] == [
+        ("US custom title", "US"), ("DE ENTRY", "DE"), ("DE ENTRY", "US"),
+    ]
+    assert [p["color"] for p in profiles] == [0, 1, 6]
+    assert profiles[1]["browser"]["knockHost"] == "knock.example"
+
+
+def test_ssh_titles_are_independent_and_preserve_ids(inventory, tmp_path):
+    raw = inventory.model_dump()
+    raw["users"]["ssh"] = raw["users"]["ssh"][:2]
+    inventory = Inventory.model_validate(raw)
+    inventory.hosts["de_entry"].services.ssh.title = "SSH Entry"
+    inventory.hosts["us_exit"].services.https.title = "US custom title"
+    alice = inventory.users.https[0]
+    original = render_config(build_bundle(inventory), alice.name, alice.password)
+    ssh = [p for p in original["profiles"] if p["proxy"]["type"] == "SSH"]
+    assert [p["name"] for p in ssh] == ["SSH Entry"] * 2 + ["US EXIT"] * 2
+    from megaproxy_server.export import export_profiles
+    output = tmp_path / "export.json"
+    export_profiles(inventory, output)
+    exported = json.loads(output.read_text())
+    assert [p["name"] for p in exported["profiles"] if p["proxy"]["type"] == "SSH"] == [
+        "SSH Entry / tun-alice", "SSH Entry / tun-db",
+        "US EXIT / tun-alice", "US EXIT / tun-db",
+    ]
+    inventory.hosts["de_entry"].services.ssh.title = "Renamed SSH"
+    inventory.hosts["us_exit"].services.https.title = "Renamed HTTPS"
+    changed = render_config(build_bundle(inventory), alice.name, alice.password)
+    assert [p["name"] for p in changed["profiles"] if p["proxy"]["type"] == "SSH"] == ["Renamed SSH"] * 2 + ["US EXIT"] * 2
+    assert [p["id"] for p in changed["profiles"]] == [p["id"] for p in original["profiles"]]
+    export_profiles(inventory, output)
+    assert [p["id"] for p in json.loads(output.read_text())["profiles"]] == [p["id"] for p in exported["profiles"]]
 
 
 def test_http_access_robots_and_conditional_authentication(inventory, tmp_path, capsys):
@@ -363,5 +599,7 @@ def test_api_requires_safe_https_settings(changes):
 def test_disabled_api_only_host_can_be_kept_for_teardown(inventory):
     raw = inventory.model_dump()
     raw["hosts"] = {"configs_one": raw["hosts"]["configs_one"]}
+    raw["settings"]["ssh_jump_pairs"] = []
+    raw["settings"]["https_chain_pairs"] = []
     raw["hosts"]["configs_one"]["services"]["config_api"]["enabled"] = False
     Inventory.model_validate(raw)

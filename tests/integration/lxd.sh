@@ -82,10 +82,10 @@ EOF
 {
   printf '%s\n' 'version: 1' 'settings:' '  manage_firewall: true' '  unattended_upgrades: true' 'hosts:'
   printf '%s\n' '  one:' "    address: $ip_one" '    admin:' '      user: ci-admin' '      bootstrap_user: root' '      port: 22' "      private_key_file: $key_file" "      public_key: \"$public_key\"" '    services:'
-  printf '%s\n' '      https:' '        endpoint: '"$ip_one" '        certificate: self-signed' '        users:' '          - name: ci-user' '            password: ci-password-is-long-and-random' '        probe_resistance:' '          enabled: true'
-  printf '%s\n' '      ssh:' '        port: 22' '        users:' '          - name: mp-ci' '            authentication:' '              type: key' "              public_key: \"$public_key\"" "              generated_private_key: $key_file"
+  printf '%s\n' '      https:' '        title: CI HTTPS' '        endpoint: '"$ip_one" '        certificate: self-signed' '        users:' '          - name: ci-user' '            password: ci-password-is-long-and-random' '        probe_resistance:' '          enabled: true'
+  printf '%s\n' '      ssh:' '        title: CI SSH' '        port: 22' '        users:' '          - name: mp-ci' '            authentication:' '              type: key' "              public_key: \"$public_key\"" "              generated_private_key: $key_file"
   if [[ "$host_count" -ge 2 ]]; then
-    printf '%s\n' '  two:' "    address: $ip_two" '    admin:' '      user: ci-admin' '      bootstrap_user: root' '      port: 22' "      private_key_file: $key_file" "      public_key: \"$public_key\"" '    services:' '      ssh:' '        port: 22' '        users:' '          - name: mp-ci' '            authentication:' '              type: key' "              public_key: \"$public_key\"" "              generated_private_key: $key_file"
+    printf '%s\n' '  two:' "    address: $ip_two" '    admin:' '      user: ci-admin' '      bootstrap_user: root' '      port: 22' "      private_key_file: $key_file" "      public_key: \"$public_key\"" '    services:' '      ssh:' '        title: CI SSH' '        port: 22' '        users:' '          - name: mp-ci' '            authentication:' '              type: key' "              public_key: \"$public_key\"" "              generated_private_key: $key_file"
   fi
 } > "$inventory_file"
 chmod 0600 "$inventory_file"

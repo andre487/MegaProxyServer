@@ -47,7 +47,7 @@ def parser() -> argparse.ArgumentParser:
     export = sub.add_parser("export")
     commands.append(export)
     export.add_argument("--output", default=".generated/megaproxy-profiles.json")
-    export.add_argument("--all-jumps", action="store_true")
+    export.add_argument("--all-jumps", action="store_true", help="Compatibility flag; only configured jump pairs are exported")
     configs = sub.add_parser("configs", help="Generate all supported client configuration formats")
     commands.append(configs)
     configs.add_argument("--output-dir", default=".generated/configs")
@@ -60,7 +60,7 @@ def parser() -> argparse.ArgumentParser:
     commands.append(sub.add_parser("remove-users", help="Remove one or more proxy user accounts"))
     commands.append(sub.add_parser("link-users", help="Choose SSH accounts for each HTTPS user"))
     commands.append(sub.add_parser("vault-secrets", help="Encrypt only secret inventory fields with Ansible Vault"))
-    commands.append(sub.add_parser("jumps", help="List all possible SSH jump chains"))
+    commands.append(sub.add_parser("jumps", help="List configured SSH jump chains"))
     for command in commands:
         command.add_argument("--no-hooks", action="store_true", default=argparse.SUPPRESS, help=argparse.SUPPRESS)
     return result
@@ -99,7 +99,7 @@ def run_ansible(path: Path, playbook: str, *, check: bool = False, limit: str | 
 
 
 def interactive_command() -> str:
-    value = questionary.select("MegaProxy Server", choices=[questionary.Choice("Add a host", "add-host"), questionary.Choice("Bootstrap administrative access", "bootstrap"), questionary.Choice("Validate configuration", "validate"), questionary.Choice("Plan changes", "plan"), questionary.Choice("Apply configuration", "apply"), questionary.Choice("Verify configured servers (after apply)", "verify"), questionary.Choice("Encrypt inventory secrets with Ansible Vault", "vault-secrets"), questionary.Choice("Remove proxy users", "remove-users"), questionary.Choice("Link HTTPS users to SSH accounts", "link-users"), questionary.Choice("Show credential summary", "summary"), questionary.Choice("Generate all client configuration formats", "configs"), questionary.Choice("Export MegaProxy profiles", "export"), questionary.Choice("List possible SSH jump chains", "jumps")]).ask()
+    value = questionary.select("MegaProxy Server", choices=[questionary.Choice("Add a host", "add-host"), questionary.Choice("Bootstrap administrative access", "bootstrap"), questionary.Choice("Validate configuration", "validate"), questionary.Choice("Plan changes", "plan"), questionary.Choice("Apply configuration", "apply"), questionary.Choice("Verify configured servers (after apply)", "verify"), questionary.Choice("Encrypt inventory secrets with Ansible Vault", "vault-secrets"), questionary.Choice("Remove proxy users", "remove-users"), questionary.Choice("Link HTTPS users to SSH accounts", "link-users"), questionary.Choice("Show credential summary", "summary"), questionary.Choice("Generate all client configuration formats", "configs"), questionary.Choice("Export MegaProxy profiles", "export"), questionary.Choice("List configured SSH jump chains", "jumps")]).ask()
     if value is None:
         raise KeyboardInterrupt
     return value
@@ -192,7 +192,7 @@ def main() -> None:
             return
         if command == "export":
             output = Path(getattr(args, "output", ".generated/megaproxy-profiles.json"))
-            export_profiles(inventory, output, getattr(args, "all_jumps", False))
+            export_profiles(inventory, output)
             print(f"Exported profiles to {output}")
             return
         if command == "configs":

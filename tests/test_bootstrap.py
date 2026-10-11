@@ -15,7 +15,7 @@ def inventory():
             'address': '192.0.2.1',
             'admin': {'user': 'deploy', 'bootstrap_user': 'root', 'bootstrap_auth': 'password',
                       'private_key_file': '/keys/admin', 'public_key': 'ssh-ed25519 AAAA'},
-            'services': {'ssh': {'users': [{'name': 'proxy-user', 'authentication': {
+            'services': {'ssh': {'title': 'SSH', 'users': [{'name': 'proxy-user', 'authentication': {
                 'type': 'password', 'password': 'proxy-password-long', 'password_hash': '$6$hash',
             }}]}},
         }},
@@ -130,6 +130,7 @@ def test_add_host_preserves_existing_settings_and_users(monkeypatch, tmp_path):
         'Permanent administrative user to create or update': 'deploy',
         'Administrative SSH port': '22',
         'SSH proxy port': '22',
+        'SSH profile title': 'SECOND',
     }
     monkeypatch.setattr(wizard, 'ask_required', lambda message, default=None: answers[message])
     monkeypatch.setattr(wizard.questionary, 'select', lambda message, **kwargs: SimpleNamespace(ask=lambda: 'password' if message == 'Initial SSH authentication' else 'Generate a dedicated key'))

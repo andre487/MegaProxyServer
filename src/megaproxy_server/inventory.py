@@ -151,12 +151,12 @@ def https_routes(inventory: Inventory, name: str) -> list[dict[str, Any]]:
     if not https or not https.enabled:
         return []
     routes: list[dict[str, Any]] = []
-    entry_title = https.title or _host_title(name)
+    entry_title = https.title
     if https.direct:
-        routes.append({"name": "direct", "hostname": https.endpoint, "is_ip": _is_ip(https.endpoint), "title": entry_title, "country_code": name.split("_", 1)[0].upper(), "port": inventory.settings.https_chain_backend_port, "chain": None, "probe_resistance": https.probe_resistance.model_dump(mode="json")})
+        routes.append({"name": "direct", "hostname": https.endpoint, "is_ip": _is_ip(https.endpoint), "title": entry_title, "country_code": name.removeprefix("proxy_").split("_", 1)[0].upper(), "port": inventory.settings.https_chain_backend_port, "chain": None, "probe_resistance": https.probe_resistance.model_dump(mode="json")})
     if inventory.settings.https_chains_enabled and https.chain_entry:
         configured_pairs = [pair for pair in inventory.settings.https_chain_pairs if pair.entry == name]
-        allowed_exits = {pair.exit for pair in configured_pairs} if inventory.settings.https_chain_pairs else None
+        allowed_exits = {pair.exit for pair in configured_pairs}
         pair_hostnames = {pair.exit: pair.hostname for pair in configured_pairs}
         pair_titles = {pair.exit: pair.title for pair in configured_pairs}
         pair_country_codes = {pair.exit: pair.country_code for pair in configured_pairs}
@@ -165,7 +165,7 @@ def https_routes(inventory: Inventory, name: str) -> list[dict[str, Any]]:
             (exit_name, exit_host.services.https)
             for exit_name, exit_host in sorted(inventory.hosts.items())
             if exit_name != name and exit_host.services.https and exit_host.services.https.enabled and exit_host.services.https.chain_exit
-            and (allowed_exits is None or exit_name in allowed_exits)
+            and exit_name in allowed_exits
         ]
         for index, (exit_name, exit_https) in enumerate(exits, start=len(routes)):
             probe_resistance = pair_probe_resistance.get(exit_name) or https.probe_resistance
@@ -174,8 +174,8 @@ def https_routes(inventory: Inventory, name: str) -> list[dict[str, Any]]:
                 "name": f"via-{exit_name}",
                 "hostname": route_hostname,
                 "is_ip": _is_ip(route_hostname),
-                "title": pair_titles.get(exit_name) or entry_title,
-                "country_code": pair_country_codes.get(exit_name) or exit_name.split("_", 1)[0].upper(),
+                "title": pair_titles[exit_name],
+                "country_code": pair_country_codes.get(exit_name) or exit_name.removeprefix("proxy_").split("_", 1)[0].upper(),
                 "port": inventory.settings.https_chain_backend_port + index,
                 "chain": {"host": exit_https.endpoint, "port": exit_https.port, "username": exit_https.chain_username, "password": exit_https.chain_password},
                 "probe_resistance": probe_resistance.model_dump(mode="json"),
@@ -189,19 +189,40 @@ def _dns_label(value: str) -> str:
     return re.sub(r"[^a-z0-9-]+", "-", value.lower()).strip("-")
 
 
+def https_profile_routes(inventory: Inventory) -> list[tuple[str, dict[str, Any]]]:
+    routes = {(name, route["name"]): route
+              for name in inventory.hosts for route in https_routes(inventory, name)}
+    direct = [(name, route) for (name, kind), route in routes.items() if kind == "direct"]
+    chains = [(pair.entry, routes[(pair.entry, f"via-{pair.exit}")])
+              for pair in inventory.settings.https_chain_pairs
+              if (pair.entry, f"via-{pair.exit}") in routes]
+    return direct + chains
+
+
+def https_jump_routes(inventory: Inventory) -> list[dict[str, Any]]:
+    routes = []
+    for pair in inventory.settings.https_jump_pairs:
+        exit_route = next(r for r in https_routes(inventory, pair.exit) if r["name"] == "direct")
+        routes.append({
+            "entry": pair.entry, "exit": pair.exit,
+            "title": pair.title,
+            "country_code": pair.country_code or exit_route["country_code"],
+        })
+    return routes
+
+
+def ssh_jump_routes(inventory: Inventory) -> list[dict[str, Any]]:
+    return [dict(pair.model_dump(),
+                 country_code=pair.country_code or pair.exit.removeprefix("proxy_").split("_", 1)[0].upper())
+            for pair in inventory.settings.ssh_jump_pairs]
+
+
 def _is_ip(value: str) -> bool:
     try:
         ipaddress.ip_address(value)
     except ValueError:
         return False
     return True
-
-
-def _host_title(name: str) -> str:
-    parts = name.split("_")
-    if parts[-1:] == ["proxy"]:
-        parts.pop()
-    return " ".join([parts[0].upper(), *(part.title() for part in parts[1:])])
 
 
 def ansible_inventory(inventory: Inventory) -> dict[str, Any]:
