@@ -12,6 +12,15 @@ from ruamel.yaml import YAML
 
 from .inventory import LOCAL_SSH_ARGS, ROOT, ansible_inventory, save
 from .models import Host, Inventory
+from .secrets import public_key
+
+
+def validate_admin_key(host: Host) -> None:
+    private = Path(host.admin.private_key_file).expanduser()
+    if not private.is_file():
+        raise ValueError("Administrative private_key_file is unavailable")
+    if host.admin.public_key and public_key(private).split()[:2] != host.admin.public_key.split()[:2]:
+        raise ValueError("Administrative public_key must match private_key_file; use bootstrap_private_key_file for the old key during rotation")
 
 
 def check_admin(host: Host, *, report_error: bool = False) -> bool:
@@ -76,6 +85,7 @@ def bootstrap(path: Path, inventory: Inventory, limit: str | None = None) -> int
         host = inventory.hosts[name]
         if not host.admin.bootstrap_user:
             continue
+        validate_admin_key(host)
         print(f'Bootstrapping administrative access: {name}', flush=True)
         if not check_admin(host):
             password = None

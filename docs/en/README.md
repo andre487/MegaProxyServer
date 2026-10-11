@@ -161,11 +161,18 @@ reserved names and paths are rejected in `removed_ssh`. The administrative
 revokes the old key. Changing `admin.user` requires bootstrap through a working
 account: the new administrator is verified before retiring the previous managed
 account and sudo access, preserving its files.
+For key rotation, set the new `public_key`/`private_key_file`, the current admin as
+`bootstrap_user`, and the old private key as `bootstrap_private_key_file`.
+Bootstrap verifies the new login before revoking the old key; mismatched public
+and private keys are rejected.
 
 Inventory and exports are replaced atomically with mode `0600`. Export validation
 runs before replacing an existing file; unknown country codes become empty strings.
 Port conflicts and HTTPS without routes are rejected before connecting to a host.
 Docker cleanup only removes old GOST/Certbot images, without global prune operations.
+HTTPS chains verify the exit certificate and hostname. CI uses a local CA to test
+knock/chain overrides, nested TLS Jump, and rejection of bad credentials, certificates
+or unavailable exits, without external domains or ACME for these checks.
 
 | enabled | generate_profile | Result |
 | --- | --- | --- |

@@ -29,6 +29,7 @@ def setup(monkeypatch, checks, phase_code=0):
     monkeypatch.setattr(module.getpass, 'getpass', lambda prompt: 'root-secret')
     monkeypatch.setattr(module, 'run_phase', lambda inv, name, phase, password=None: calls.append((phase, password)) or phase_code)
     monkeypatch.setattr(module, 'save', lambda path, inv: calls.append(('save', inv.hosts['new'].admin.bootstrap_user)))
+    monkeypatch.setattr(module, 'validate_admin_key', lambda host: None)
     return calls
 
 

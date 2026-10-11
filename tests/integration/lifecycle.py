@@ -56,8 +56,12 @@ def main():
             assert result.returncode != 0 and b"CI local target" not in result.stdout
 
     host.admin.public_key = public
-    apply("admin")  # The old connection installs the new key before it is revoked.
     host.admin.private_key_file = str(admin_key)
+    host.admin.bootstrap_user = host.admin.user
+    host.admin.bootstrap_private_key_file = old_admin_key
+    apply("admin")  # Verify the new key before revoking the old one, without relying on multiplexing.
+    source = load(args.inventory)
+    host = source.hosts["one"]
     save(args.inventory, source)
     assert ssh(host.admin.user, admin_key).returncode == 0
     assert ssh(host.admin.user, old_admin_key).returncode != 0

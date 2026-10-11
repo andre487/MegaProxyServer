@@ -25,11 +25,22 @@
     mode: "0700"
 
 - name: Install administrative public key
+  ansible.builtin.lineinfile:
+    path: "{{ megaproxy_admin_account.home }}/.ssh/authorized_keys"
+    line: "{{ megaproxy_admin.public_key }}"
+    create: true
+    owner: "{{ megaproxy_admin.user }}"
+    mode: "0600"
+  when: megaproxy_bootstrap_phase | default('') == 'account'
+  no_log: true
+
+- name: Replace verified administrative public key
   ansible.builtin.copy:
     dest: "{{ megaproxy_admin_account.home }}/.ssh/authorized_keys"
     content: "{{ megaproxy_admin.public_key }}\n"
     owner: "{{ megaproxy_admin.user }}"
     mode: "0600"
+  when: megaproxy_bootstrap_phase | default('') != 'account'
   no_log: true
 
 - name: Allow non-interactive administration through sudo

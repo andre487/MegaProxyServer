@@ -11,10 +11,12 @@ from jinja2 import Environment
 from ruamel.yaml import YAML
 
 from megaproxy_server import inventory as inventory_module, wizard
+from megaproxy_server.bootstrap import validate_admin_key
 from megaproxy_server.config_bundle import validate_config
 from megaproxy_server.export import export_profiles
 from megaproxy_server.inventory import ROOT, load, save
 from megaproxy_server.models import Inventory
+from megaproxy_server.secrets import generate_key
 
 
 @pytest.fixture
@@ -133,7 +135,7 @@ def test_administrative_key_rotation_revokes_previous_key(tmp_path):
     target = tmp_path / "authorized_keys"
     target.write_text("ssh-ed25519 OLD\n")
     task = next(t for t in YAML(typ="safe").load((ROOT / "roles/admin/tasks/account.yml").read_text())
-                if t["name"] == "Install administrative public key")
+                if t["name"] == "Replace verified administrative public key")
     task["ansible.builtin.copy"].update(dest=str(target), content="ssh-ed25519 NEW\n")
     task["ansible.builtin.copy"].pop("owner")
     result = run_tasks([task], tmp_path)
@@ -141,13 +143,33 @@ def test_administrative_key_rotation_revokes_previous_key(tmp_path):
     assert target.read_text() == "ssh-ed25519 NEW\n"
 
 
+def test_controller_key_must_match_new_administrative_public_key(raw_inventory, tmp_path):
+    old_public, old_key = generate_key(tmp_path / "old-admin", "old")
+    new_public, new_key = generate_key(tmp_path / "new-admin", "new")
+    source = Inventory.model_validate(raw_inventory)
+    host = source.hosts["one"]
+    host.admin.private_key_file = str(old_key)
+    host.admin.public_key = new_public
+    with pytest.raises(ValueError, match="must match"):
+        validate_admin_key(host)
+    host.admin.public_key = old_public
+    validate_admin_key(host)
+    host.admin.public_key = new_public
+    host.admin.private_key_file = str(new_key)
+    host.admin.bootstrap_private_key_file = str(old_key)
+    validate_admin_key(host)
+
+
 def test_unmanaged_account_is_rejected_before_destructive_tasks(tmp_path):
     tasks = YAML(typ="safe").load((ROOT / "roles/ssh_proxy/tasks/validate_accounts.yml").read_text())
-    tasks[0]["vars"] = {"megaproxy_admin": {"user": "deploy"},
+    variables = {"megaproxy_admin": {"user": "deploy"},
         "megaproxy_services": {"ssh": {"users": [], "removed_users": ["other-user"]}}}
+    for task in tasks:
+        task["vars"] = variables
     # Replace only the OS lookup boundary; execute the actual guard before deletion.
-    tasks[1]["ansible.builtin.command"]["argv"] = ["echo", "other-group"]
-    tasks[1]["vars"] = tasks[0]["vars"]
+    for task in tasks:
+        if "ansible.builtin.command" in task and task["ansible.builtin.command"]["argv"][0] == "id":
+            task["ansible.builtin.command"]["argv"] = ["echo", "other-group"]
     marker = tmp_path / "deleted"
     tasks.append({"ansible.builtin.copy": {"dest": str(marker), "content": "unsafe"}})
     result = run_tasks(tasks, tmp_path)

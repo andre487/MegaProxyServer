@@ -47,6 +47,9 @@ jobs:
       - name: Verify authenticated SOCKS5 and MASQUE TCP and UDP
         run: uv run --frozen python tests/integration/transports.py --gost "$RUNNER_TEMP/megaproxy-gost/gost"
 
+      - name: Verify HTTPS knock, server chains and Jump
+        run: uv run --frozen python tests/integration/https.py --gost "$RUNNER_TEMP/megaproxy-gost/gost"
+
       - name: Verify HTTPS config API through nginx
         run: |
           sudo apt-get update

@@ -9,7 +9,7 @@ from pathlib import Path
 import questionary
 from pydantic import ValidationError
 
-from .bootstrap import bootstrap
+from .bootstrap import bootstrap, validate_admin_key
 from .export import export_profiles, jump_candidates
 from .generate import generate
 from .hooks import run_hooks
@@ -87,7 +87,16 @@ def choose_inventory(explicit: str | None, force_create: bool = False) -> Path:
 
 
 def run_ansible(path: Path, playbook: str, *, check: bool = False, limit: str | None = None, tags: str | None = None) -> int:
-    generated = write_ansible_inventory(path, load(path), prepare_config_api=playbook == "site.yml")
+    inventory = load(path)
+    generated = write_ansible_inventory(path, inventory, prepare_config_api=playbook == "site.yml")
+    if playbook == "site.yml" and not check:
+        from ansible.inventory.manager import InventoryManager
+        from ansible.parsing.dataloader import DataLoader
+        selected = InventoryManager(loader=DataLoader(), sources=[str(generated)])
+        if limit:
+            selected.subset(limit)
+        for target in selected.get_hosts("all"):
+            validate_admin_key(inventory.hosts[target.name])
     command = ["ansible-playbook", "-i", str(generated), str(ROOT / "playbooks" / playbook)]
     if check:
         command += ["--check", "--diff"]

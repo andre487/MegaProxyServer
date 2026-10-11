@@ -1,4 +1,16 @@
 ---
+- name: Inspect administrative group membership
+  ansible.builtin.command:
+    argv: [id, -Gn, --, "{{ megaproxy_admin.user }}"]
+  register: megaproxy_admin_groups
+  changed_when: false
+  check_mode: false
+
+- name: Keep administrative access outside the restricted proxy group
+  ansible.builtin.assert:
+    that: "'megaproxy' not in megaproxy_admin_groups.stdout.split()"
+    fail_msg: "The administrative account must not belong to the proxy group"
+
 - name: Require dedicated and safe SSH proxy logins
   ansible.builtin.assert:
     that:

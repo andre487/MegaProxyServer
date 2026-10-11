@@ -1,4 +1,8 @@
 ---
+- name: Finalize verified administrative key after bootstrap
+  ansible.builtin.include_tasks: account.yml
+  when: megaproxy_bootstrap_phase | default('') == 'policy'
+
 - name: Read current SSH connection context
   ansible.builtin.command: printenv SSH_CONNECTION
   become: false
