@@ -42,8 +42,6 @@ hosts:
         certbot_version: v5.4.0
         probe_resistance:
           enabled: false
-          mode: disabled
-          site_title: Personal site
           # Set a hostname when enabling probe resistance; the first host is exported as browser.knockHost.
           knock: []
       ssh:

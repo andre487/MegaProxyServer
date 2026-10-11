@@ -67,8 +67,10 @@ hosts:
 
 `enabled` по умолчанию true и управляет настройкой и проверкой SSH-прокси на сервере.
 При false SSH-профили для хоста не генерируются, ссылки на него в jump-парах отклоняются.
-Этот флаг не отключает административный SSH и не удаляет ранее созданные аккаунты:
-роль SSH-прокси просто пропускается. Для отзыва аккаунта используйте `remove-users` и `apply`.
+После `apply` с тегом `ssh` доступ группы `megaproxy` запрещается и её сессии закрываются.
+Административный SSH сохраняется, существующие прокси-аккаунты остаются на сервере.
+Для удаления аккаунта используйте `remove-users` и `apply`; для закрытия устаревших
+портов включите тег `firewall` или выполните полный `apply`.
 
 Названия прямых SSH-профилей берутся из обязательного `services.ssh.title`.
 API выдаёт title без логина; общий экспорт добавляет ` / логин`, как для HTTPS.
@@ -193,8 +195,9 @@ API-адресов соответствует ограничению прото�
 `X-MegaProxy-Client: browser_chromium` и `browser_firefox` выбирают HTTPS и совместимые
 SOCKS5-профили; SSH/jump/MASQUE-профили и Android-поля в этот ответ не включаются.
 Chromium не получает SOCKS5 с реквизитами; для Firefox проверяется лимит 255 UTF-8 байт.
-Значения `android` и `android_megaproxy` выбирают Android-проекцию без SOCKS5, IPv6 endpoints
-и browser-полей. Без заголовка или с неизвестным значением возвращается общий формат v8.
+Значения `android` и `android_megaproxy` выбирают Android-проекцию без IPv6 endpoints
+и browser-полей; SOCKS5 и MASQUE сохраняются. Для них требуется совместимая версия клиента.
+Без заголовка или с неизвестным значением возвращается общий формат v8.
 Заголовок клиента не расширяет права на SSH-аккаунты.
 
 `X-MegaProxy-Version` — версия приложения клиента. ETag учитывает пользователя, выбранный
@@ -297,18 +300,19 @@ curl --fail --silent --show-error --basic --netrc-file ./credentials.netrc \
 Локальный тест с настоящим nginx и временным доверенным тестовым сертификатом:
 
 ```sh
-uv run python tests/integration/config_api.py --nginx /path/to/nginx
+uv run --frozen python tests/integration/config_api.py --nginx /path/to/nginx
 ```
 
 Он проверяет HTTPS, canonical v8, ETag после аутентификации, robots.txt, буквальное сравнение
-путей и ответы 403/noindex. В рабочие API-пакеты не входят полный inventory, административные
+путей, неоднозначные и некорректные заголовки Authorization, rate limit и ответы 403/noindex.
+Тест также запускается в GitHub Actions. В рабочие API-пакеты не входят полный inventory, административные
 ключи, исходные пути SSH-ключей или машинные пароли HTTPS-цепочек. Работающий API получает
 пароль и расшифрованные SSH-секреты в памяти во время авторизованного запроса.
 
 
 Knock host для замаскированного HTTPS-прокси задаётся в inventory:
-`services.https.probe_resistance.knock: [px-knock.jethelix.ru]`.
-Первый хост списка становится `browser.knockHost` в API и файловом экспорте MegaProxy;
+`services.https.probe_resistance.knock: [knock.example.com]`.
+При включённом маскировании первый хост списка становится `browser.knockHost` в API и файловом экспорте MegaProxy;
 для MASQUE он не применяется. Мастер настройки запрашивает его при включении маскирования.
 Серверные цепочки наследуют настройку entry, если у пары нет своего `probe_resistance`.
 После изменения примените HTTPS-настройки на прокси и обновите bundle API.

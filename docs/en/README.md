@@ -14,7 +14,7 @@ open a shell, TTY, subsystem, remote forwarding or tunnel device.
 
 ## Requirements
 
-The control machine needs macOS or Linux, `uv`, OpenSSH and Python 3.12+. Managed machines need a
+The control machine needs macOS or Linux, Git, `uv`, OpenSSH and Python 3.12+. Managed machines need a
 current Debian or Ubuntu release and a sudo-capable SSH account. Open TCP 443 for HTTPS and TCP 80
 during standalone ACME validation in both the provider firewall and the host firewall.
 
@@ -73,6 +73,8 @@ key paths. Local setup handles one server; multi-host management is described be
 ### Manage from another machine
 
 ```shell
+git clone https://github.com/andre487/MegaProxyServer.git
+cd MegaProxyServer
 ./mega-proxy inventory
 ./mega-proxy bootstrap
 ./mega-proxy plan
@@ -87,7 +89,9 @@ at any time with `--inventory PATH`.
 The wizard supports an initial password or a separate SSH key. Bootstrap prompts for the password
 without echoing it. The password is kept only in a private temporary connection file, removed after
 Ansible exits. Verify the server fingerprint and add its key to `known_hosts` first. Load
-passphrase-protected administrative keys with `ssh-add`.
+passphrase-protected administrative keys with `ssh-add`; deriving or validating the public key
+also uses `ssh-keygen -y`, which can ask for the passphrase separately. Unattended apply requires
+this step to work without an interactive prompt.
 
 `bootstrap` creates the administrator and sudo access, checks a fresh key-only login and `sudo -n`,
 then disables root and password-based administrative login. It verifies access again after SSH
@@ -147,12 +151,14 @@ provide metadata for personalized delivery; the current `export` and `configs` c
 `services.ssh.generate_profile` defaults to false and selects hosts for direct SSH profiles in
 `export`, `configs` and the configuration API. Administrative SSH uses `admin` settings separately.
 
-The wizard asks whether to publish direct SSH profiles. `enabled: false` also
+The wizard asks whether to publish direct SSH profiles, defaulting to yes; omitting the field
+in hand-written YAML still defaults to false. `enabled: false` also
 disables an existing proxy: HTTPS stops GOST, HAProxy and the renewal timer; SSH
 denies the `megaproxy` group and closes its sessions while preserving administrative
 SSH. Keep the disabled service in YAML: an absent service is unmanaged. Firewall
 records its own rules and revokes retired ports on the next full apply, preserving
-other rules. An initial upgrade records existing configured ports before later changes.
+other rules. An initial upgrade records existing configured ports before later changes;
+older open ports already absent from inventory are not discovered automatically.
 
 Only accounts whose primary group is `megaproxy` may be modified or removed;
 new proxy accounts are created in that group. Administrative/bootstrap accounts,
@@ -167,7 +173,7 @@ Bootstrap verifies the new login before revoking the old key; mismatched public
 and private keys are rejected.
 
 Inventory and exports are replaced atomically with mode `0600`. Export validation
-runs before replacing an existing file; unknown country codes become empty strings.
+runs before replacing an existing file; country codes outside `[A-Z]{2}` become empty strings.
 Port conflicts and HTTPS without routes are rejected before connecting to a host.
 Docker cleanup only removes old GOST/Certbot images, without global prune operations.
 HTTPS chains verify the exit certificate and hostname. CI uses a local CA to test
@@ -180,8 +186,9 @@ or unavailable exits, without external domains or ACME for these checks.
 | true | false | Provision SSH proxy users; use the host only in declared jump pairs |
 | false | any | Deny proxy access, close proxy sessions and omit profiles; jump pairs cannot reference this host |
 
-Setting `enabled: false` skips the role; it does not remove previously provisioned accounts or
-stop the server's SSH daemon. To revoke an account, use `remove-users` and `apply`.
+Disabling SSH retains proxy accounts but denies their access; it does not stop the server's SSH
+daemon. To delete an account, use `remove-users` and `apply`. A tagged apply must include
+`firewall` to reconcile ports, for example `apply --tags ssh,https,firewall`.
 
 ```yaml
 hosts:
@@ -244,8 +251,11 @@ first, then server-side chains.
 HTTPS and SSH services and all chain/jump pairs require a nonblank `title`.
 Names are read directly from inventory; no names are derived from host identifiers.
 
-For country flags, start host identifiers with a two-letter country code followed by `_`, such as
-`de_entry` and `us_exit`. Explicit HTTPS chain pairs supply the exit country in `country_code`.
+Direct HTTPS country codes come from the first segment of the host identifier after removing
+an optional `proxy_` prefix: `de_entry` and `proxy_de` yield `DE`. Identifiers such as `px-de`
+yield an empty code. Codes must match two uppercase letters; no country registry is consulted.
+Explicit HTTPS chain pairs require `country_code`; jump pairs can override the exit's inferred
+code. Direct SSH and SOCKS5 profiles currently have an empty country code.
 The code is a display hint; use the client connection test to check the observed exit country.
 HTTPS and jump profile IDs use logical host/route identifiers and the account, so changing a
 title or endpoint preserves those IDs. Direct SSH IDs also use the host and account. SOCKS5 exports still derive IDs from their names.
@@ -259,9 +269,9 @@ Set a knock host per HTTPS proxy using `services.https.probe_resistance.knock`:
 probe_resistance:
   enabled: true
   mode: local_decoy
-  knock: [px-knock.jethelix.ru]
+  knock: [knock.example.com]
 ```
-The first host becomes `browser.knockHost` in API and MegaProxy file profiles.
+When probe resistance is enabled, the first host becomes `browser.knockHost` in API and MegaProxy file profiles.
 Chain routes inherit the entry setting unless the pair overrides `probe_resistance`.
 The setup wizard asks for the knock hostname when probe resistance is enabled.
 Apply HTTPS settings to the proxy hosts and update the config API bundle after changing it.
@@ -276,6 +286,9 @@ Masked routes serve a static site using GOST's built-in loopback file server. A 
 Python script generates a random heading and abstract SVG once. Repeated `apply` runs keep the
 site; remove `/opt/megaproxy/decoy/index.html` to regenerate it on the next `apply`.
 The page includes `noindex,nofollow`; `/robots.txt` contains `User-agent: *` and `Disallow: /`.
+Only `enabled` and `knock` currently affect masking. The inventory model accepts `mode`,
+`status_code` and `site_title`, but they do not select another response mode
+or control the generated site's title.
 
 ## HTTPS certificates and chains
 
@@ -300,7 +313,7 @@ clients to allow an invalid proxy certificate.
 
 The default `.generated/configs` directory contains:
 
-- `MegaProxy.json`: HTTPS, direct SSH for hosts with `services.ssh.generate_profile: true`, and explicitly configured SSH/HTTPS jump profiles;
+- `MegaProxy.json`: HTTPS, enabled MASQUE/SOCKS5 transports, direct SSH for hosts with `services.ssh.generate_profile: true`, and explicitly configured SSH/HTTPS jump profiles;
 - `FoxyProxy.json`: HTTPS profiles;
 - `SuperProxy.txt`: HTTPS URLs with the Super Proxy v1 header;
 - `ProxyList.txt`: URL-encoded HTTPS proxy URLs.
@@ -383,8 +396,10 @@ SNI routes remain usable through the HTTPS-only export formats. SSH jump profile
 
 ### Client limits and diagnostics
 
-The Android client forwards TCP application traffic; general UDP and QUIC forwarding are not
-implemented. SSH keys protected by a passphrase are unsupported. DNS, per-app routing, failover
+HTTPS and SSH forward TCP; MASQUE and SOCKS5 also forward UDP in compatible Android builds.
+Availability depends on the installed client release; see its
+[transport guide](https://github.com/andre487/AndroidMegaProxy#current-limitations).
+SSH keys protected by a passphrase are unsupported. DNS, per-app routing, failover
 and Android Always-on VPN are configured in the app. Exported profiles do not enable failover.
 
 Use **Test** to distinguish proxy setup, destination access and exit-IP failures. It contacts
@@ -449,8 +464,16 @@ directory is suitable for machine-local integrations such as px-manager.
 
 ## Development and troubleshooting
 
-`./mega-proxy check` runs Ruff, pytest, byte-compilation and Ansible syntax checks. CI runs the same
-suite; integration jobs provision isolated Ubuntu/Debian LXD systems.
+`./mega-proxy check` runs Ruff, pytest, byte-compilation and Ansible syntax checks. CI runs this
+suite on Python 3.12 and 3.14. Separate integration jobs run real GOST and nginx on loopback
+and provision Ubuntu 24.04 plus two Debian 12 LXD guests. They cover SSH Jump, credential
+rotation, account removal, proxy disable/re-enable, firewall cleanup and administrative access.
+They use temporary credentials and self-signed or local-CA certificates; they do not test
+production DNS, public ACME issuance or an Android device. These jobs are not run by `check`.
+
+`main` requires a pull request, all five CI checks, an up-to-date branch and resolved
+conversations. Force pushes and deletion are forbidden, including for administrators;
+approval by a second person is not required. The required check names match the workflows.
 
 - **ACME fails:** check DNS, TCP 80 and provider firewall rules.
 - **A chain domain serves an old certificate:** run `apply --limit ENTRY --tags https`, then inspect
