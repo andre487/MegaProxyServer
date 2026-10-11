@@ -93,6 +93,11 @@ chmod 0600 "$inventory_file"
 ./mega-proxy --inventory "$inventory_file" apply
 ./mega-proxy --inventory "$inventory_file" verify
 
+sudo lxc exec megaproxy-ci-one -- mkdir -p /tmp/megaproxy-ci-target
+printf '%s\n' 'CI local target' | sudo lxc exec megaproxy-ci-one -- tee /tmp/megaproxy-ci-target/index.html >/dev/null
+sudo lxc exec megaproxy-ci-one -- systemd-run --unit=megaproxy-ci-target \
+  python3 -m http.server 18082 --bind 127.0.0.1 --directory /tmp/megaproxy-ci-target
+
 for instance in "${instances[@]}"; do
   sudo lxc exec "$instance" -- sshd -T -C user=root,host=localhost,addr=127.0.0.1 | grep -x 'permitrootlogin no' >/dev/null
   sudo lxc exec "$instance" -- sshd -T -C user=ci-admin,host=localhost,addr=127.0.0.1 | grep -x 'passwordauthentication no' >/dev/null
@@ -130,6 +135,8 @@ if [[ "$host_count" -ge 2 ]]; then
   echo | openssl s_client -connect 127.0.0.1:19443 -servername example.com -verify_return_error >/dev/null
   ssh -S "$jump_socket" -O exit "mp-ci@$ip_two"
 fi
+
+uv run --frozen python tests/integration/lifecycle.py --inventory "$inventory_file" --work-dir "$work_dir"
 
 # Exercise on-server bootstrap with a new administrator, so the local account phase must run.
 if [[ "$host_count" -eq 1 ]]; then
@@ -170,4 +177,10 @@ PY
   chmod 0600 "$work_dir/local-admin"
   ssh -i "$work_dir/local-admin" -o BatchMode=yes -o IdentitiesOnly=yes \
     -o UserKnownHostsFile="$work_dir/known_hosts" "ci-local-admin@$ip_one" 'sudo -n true'
+  if ssh -i "$work_dir/rotated-admin" -o BatchMode=yes -o IdentitiesOnly=yes \
+    -o ControlMaster=no -o ControlPath=none -o UserKnownHostsFile="$work_dir/known_hosts" \
+    "ci-admin@$ip_one" 'sudo -n true'; then
+    echo "Retired administrator still has access" >&2
+    exit 1
+  fi
 fi

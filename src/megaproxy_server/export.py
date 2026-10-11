@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from .config_format import configuration, https_jump_profile, profile as _profile
-from .inventory import https_jump_routes, https_profile_routes, https_routes, ssh_jump_routes
+from .inventory import atomic_write, https_jump_routes, https_profile_routes, https_routes, ssh_jump_routes
 from .models import Host, Inventory, SshUser
 
 
@@ -111,6 +111,6 @@ def export_profiles(inventory: Inventory, output: Path, include_all_jumps: bool 
     result = configuration(profiles)
     if inventory.settings.https_jump_pairs or any(host.services.https and host.services.https.enabled and (host.services.https.http3 or host.services.https.socks5.enabled) for host in inventory.hosts.values()):
         result["version"] = 8
-    output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
-    output.chmod(0o600)
+    from .config_bundle import validate_config
+    validate_config(result, allow_legacy=True)
+    atomic_write(output, json.dumps(result, indent=2) + "\n")

@@ -7,6 +7,7 @@ import os
 import re
 import shlex
 import subprocess
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -96,10 +97,24 @@ def save(
             lambda representer, value: representer.represent_scalar("!vault", str(value), style="|"),
         )
         yaml.dump(data, stream)
-    path.write_text(stream.getvalue(), encoding="utf-8")
-    os.chmod(path, 0o600)
+    atomic_write(path, stream.getvalue())
     if remember_location:
         remember(path)
+
+
+def atomic_write(path: Path, content: str) -> None:
+    """Replace a secret file only after a complete, private write succeeds."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, temporary = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}-")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as stream:
+            stream.write(content)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, path)
+    finally:
+        if os.path.exists(temporary):
+            os.unlink(temporary)
 
 
 def _vault_secret_value() -> VaultSecret:
@@ -181,6 +196,7 @@ def https_routes(inventory: Inventory, name: str) -> list[dict[str, Any]]:
                 "probe_resistance": probe_resistance.model_dump(mode="json"),
             })
     for route in routes:
+        route["country_code"] = route["country_code"] if re.fullmatch(r"[A-Z]{2}", route["country_code"]) else ""
         route["http3_port"] = https.port if https.http3 and not route["chain"] else None
     return routes
 

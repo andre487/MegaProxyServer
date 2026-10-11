@@ -179,6 +179,7 @@ def create_inventory(path: Path = DEFAULT_INVENTORY, existing: Inventory | None 
                 print("These SSH proxy users will be configured on every SSH-enabled host.")
                 global_ssh_users = ask_users("SSH", "all-hosts", {admin_user} | {host.admin.user for host in hosts.values()})
             ssh = SshService(
+                generate_profile=bool(questionary.confirm("Publish direct SSH profiles for this host?", default=True).ask()),
                 title=ask_required("SSH profile title", https.title if https else name),
                 port=int(ask_required("SSH proxy port", str(admin_port))),
                 users=global_ssh_users,

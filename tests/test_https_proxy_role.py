@@ -41,7 +41,7 @@ def test_rendered_transports_and_firewall_are_opt_in():
 
 
 def test_https_role_loads_a_certificate_newer_than_the_service() -> None:
-    tasks = (ROOT / "roles" / "https_proxy" / "tasks" / "main.yml").read_text(
+    tasks = (ROOT / "roles" / "https_proxy" / "tasks" / "enabled.yml").read_text(
         encoding="utf-8"
     )
     reload_task = tasks.split("- name: Load a newer certificate into GOST", 1)[1].split(
@@ -53,7 +53,7 @@ def test_https_role_loads_a_certificate_newer_than_the_service() -> None:
 
 
 def test_domain_certificate_detects_openssl_textual_mismatch() -> None:
-    tasks = (ROOT / "roles" / "https_proxy" / "tasks" / "main.yml").read_text(
+    tasks = (ROOT / "roles" / "https_proxy" / "tasks" / "enabled.yml").read_text(
         encoding="utf-8"
     )
     decision_task = tasks.split(
@@ -98,7 +98,7 @@ def test_https_proxy_uses_http2() -> None:
 
 
 def test_docker_cleanup_runs_after_docker_service_changes() -> None:
-    tasks = (ROOT / "roles" / "https_proxy" / "tasks" / "main.yml").read_text(
+    tasks = (ROOT / "roles" / "https_proxy" / "tasks" / "enabled.yml").read_text(
         encoding="utf-8"
     )
     handlers = (ROOT / "roles" / "https_proxy" / "handlers" / "main.yml").read_text(
@@ -119,6 +119,3 @@ def test_docker_cleanup_runs_after_docker_service_changes() -> None:
     assert "cleanup_old_images gogost/gost" in cleanup
     assert "cleanup_old_images certbot/certbot" in cleanup
     assert "megaproxy_services.https.certbot_version" in cleanup
-    assert "docker image prune --force" in cleanup
-    assert "docker volume prune --force" in cleanup
-    assert "docker network prune --force" in cleanup

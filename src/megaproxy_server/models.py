@@ -8,6 +8,8 @@ from pydantic import BaseModel, Field, model_validator
 
 
 Port = Annotated[int, Field(ge=1, le=65535)]
+SshLogin = Annotated[str, Field(min_length=1, pattern=r"^[a-z_][a-z0-9_-]*$")]
+RESERVED_SSH_USERS = {"root", "admin", "ansible", "ubuntu", "debian", "ec2-user"}
 
 
 class AdminAccess(BaseModel):
@@ -106,13 +108,12 @@ class SshAuthentication(BaseModel):
 
 
 class SshUser(BaseModel):
-    name: str = Field(min_length=1, pattern=r"^[a-z_][a-z0-9_-]*$")
+    name: SshLogin
     authentication: SshAuthentication
 
     @model_validator(mode="after")
     def dedicated_account(self) -> SshUser:
-        reserved = {"root", "admin", "ansible", "ubuntu", "debian", "ec2-user"}
-        if self.name in reserved:
+        if self.name in RESERVED_SSH_USERS:
             raise ValueError("use a dedicated SSH proxy login, not a system account")
         return self
 
@@ -123,7 +124,7 @@ class SshService(BaseModel):
     title: str = Field(min_length=1, pattern=r"\S")
     port: Port = 22
     users: list[SshUser] = Field(min_length=1)
-    removed_users: list[str] = Field(default_factory=list)
+    removed_users: list[SshLogin] = Field(default_factory=list)
     max_startups: str = "10:30:60"
     per_source_max_startups: int = Field(default=5, ge=1, le=100)
     fail2ban: bool = True
@@ -169,8 +170,8 @@ class Services(BaseModel):
 
     @model_validator(mode="after")
     def any_enabled(self) -> Services:
-        if not any(service and service.enabled for service in (self.https, self.ssh, self.config_api)) and not (self.config_api and not self.config_api.enabled):
-            raise ValueError("at least one service must be enabled")
+        if not any((self.https, self.ssh, self.config_api)):
+            raise ValueError("at least one service must be configured")
         if self.config_api and self.config_api.enabled and self.https and self.https.enabled:
             raise ValueError("deploy the config API on a separate host from the HTTPS proxy")
         return self
@@ -209,6 +210,11 @@ class Host(BaseModel):
                 raise ValueError("an SSH proxy user must not be the administrative user")
             if set(names) & set(self.services.ssh.removed_users):
                 raise ValueError("an SSH proxy user cannot be both present and removed")
+            forbidden = RESERVED_SSH_USERS | {self.admin.user, self.admin.bootstrap_user}
+            if forbidden & set(self.services.ssh.removed_users):
+                raise ValueError("cannot remove an administrative or reserved SSH account")
+            if self.admin.bootstrap_user in names:
+                raise ValueError("an SSH proxy user must not be the bootstrap user")
         return self
 
 
@@ -256,7 +262,7 @@ class Settings(BaseModel):
 class ProxyUsers(BaseModel):
     https: list[HttpsUser] = Field(default_factory=list)
     ssh: list[SshUser] = Field(default_factory=list)
-    removed_ssh: list[str] = Field(default_factory=list)
+    removed_ssh: list[SshLogin] = Field(default_factory=list)
 
 
 class Inventory(BaseModel):
@@ -319,13 +325,34 @@ class Inventory(BaseModel):
         from .inventory import https_routes
         for name, host in self.hosts.items():
             https = host.services.https
-            if not https or not https.enabled or not https.socks5.enabled:
+            if not https or not https.enabled:
                 continue
             routes = https_routes(self, name)
-            if https.socks5.port in {route["port"] for route in routes}:
-                raise ValueError("SOCKS5 port conflicts with an HTTPS backend")
-            if any(https.socks5.udp_port_min <= route["http3_port"] <= https.socks5.udp_port_max for route in routes if route["http3_port"]):
+            if not routes:
+                raise ValueError(f"enabled HTTPS host {name!r} requires at least one route")
+            tcp_ports = {host.admin.port}
+            if host.services.ssh and host.services.ssh.enabled:
+                tcp_ports.add(host.services.ssh.port)  # Both ports belong to the same sshd.
+            listeners = [https.port] + [route["port"] for route in routes]
+            if any(route["probe_resistance"]["enabled"] for route in routes):
+                listeners.append(18080)
+            if https.certificate != "self-signed":
+                listeners.append(80)
+            if https.socks5.enabled:
+                listeners.append(https.socks5.port)
+            for port in listeners:
+                if not 1 <= port <= 65535 or port in tcp_ports:
+                    raise ValueError(f"HTTPS listener port {port} conflicts or is out of range on {name!r}")
+                tcp_ports.add(port)
+            if https.http3 and not https.direct:
+                raise ValueError("HTTP/3 requires a direct HTTPS route")
+            if https.socks5.enabled and any(https.socks5.udp_port_min <= route["http3_port"] <= https.socks5.udp_port_max for route in routes if route["http3_port"]):
                 raise ValueError("SOCKS5 UDP range conflicts with HTTP/3")
+        forbidden_removals = RESERVED_SSH_USERS | {
+            value for host in self.hosts.values() for value in (host.admin.user, host.admin.bootstrap_user)
+        }
+        if forbidden_removals & set(self.users.removed_ssh):
+            raise ValueError("cannot remove an administrative or reserved SSH account")
         api_services = [host.services.config_api for host in self.hosts.values() if host.services.config_api and host.services.config_api.enabled]
         if len(api_services) > 8:
             raise ValueError("subscriptions support at most eight config API endpoints")

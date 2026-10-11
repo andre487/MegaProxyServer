@@ -5,7 +5,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_key_only_account_is_not_locked_before_public_key_authentication() -> None:
-    tasks = (ROOT / "roles" / "ssh_proxy" / "tasks" / "main.yml").read_text(encoding="utf-8")
+    tasks = (ROOT / "roles" / "ssh_proxy" / "tasks" / "enabled.yml").read_text(encoding="utf-8")
     user_task = tasks.split("- name: Create restricted SSH proxy users", 1)[1].split(
         "- name: Explain deferred SSH user planning", 1
     )[0]
@@ -15,7 +15,7 @@ def test_key_only_account_is_not_locked_before_public_key_authentication() -> No
 
 
 def test_authorized_key_relies_on_the_restricted_sshd_match_block() -> None:
-    tasks = (ROOT / "roles" / "ssh_proxy" / "tasks" / "main.yml").read_text(encoding="utf-8")
+    tasks = (ROOT / "roles" / "ssh_proxy" / "tasks" / "enabled.yml").read_text(encoding="utf-8")
     key_task = tasks.split("- name: Install restricted authorized keys", 1)[1].split(
         "- name: Remove key files for password-only users", 1
     )[0]

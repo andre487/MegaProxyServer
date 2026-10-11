@@ -147,11 +147,38 @@ provide metadata for personalized delivery; the current `export` and `configs` c
 `services.ssh.generate_profile` defaults to false and selects hosts for direct SSH profiles in
 `export`, `configs` and the configuration API. Administrative SSH uses `admin` settings separately.
 
+The wizard asks whether to publish direct SSH profiles. `enabled: false` also
+disables an existing proxy: HTTPS stops GOST, HAProxy and the renewal timer; SSH
+denies the `megaproxy` group and closes its sessions while preserving administrative
+SSH. Keep the disabled service in YAML: an absent service is unmanaged. Firewall
+records its own rules and revokes retired ports on the next full apply, preserving
+other rules. An initial upgrade records existing configured ports before later changes.
+
+Only accounts whose primary group is `megaproxy` may be modified or removed;
+new proxy accounts are created in that group. Administrative/bootstrap accounts,
+reserved names and paths are rejected in `removed_ssh`. The administrative
+`authorized_keys` file is managed exclusively: replacing `admin.public_key`
+revokes the old key. Changing `admin.user` requires bootstrap through a working
+account: the new administrator is verified before retiring the previous managed
+account and sudo access, preserving its files.
+For key rotation, set the new `public_key`/`private_key_file`, the current admin as
+`bootstrap_user`, and the old private key as `bootstrap_private_key_file`.
+Bootstrap verifies the new login before revoking the old key; mismatched public
+and private keys are rejected.
+
+Inventory and exports are replaced atomically with mode `0600`. Export validation
+runs before replacing an existing file; unknown country codes become empty strings.
+Port conflicts and HTTPS without routes are rejected before connecting to a host.
+Docker cleanup only removes old GOST/Certbot images, without global prune operations.
+HTTPS chains verify the exit certificate and hostname. CI uses a local CA to test
+knock/chain overrides, nested TLS Jump, and rejection of bad credentials, certificates
+or unavailable exits, without external domains or ACME for these checks.
+
 | enabled | generate_profile | Result |
 | --- | --- | --- |
 | true | true | Provision SSH proxy users and publish direct SSH profiles |
 | true | false | Provision SSH proxy users; use the host only in declared jump pairs |
-| false | any | Skip SSH proxy provisioning/verification and profile generation; jump pairs cannot reference this host |
+| false | any | Deny proxy access, close proxy sessions and omit profiles; jump pairs cannot reference this host |
 
 Setting `enabled: false` skips the role; it does not remove previously provisioned accounts or
 stop the server's SSH daemon. To revoke an account, use `remove-users` and `apply`.

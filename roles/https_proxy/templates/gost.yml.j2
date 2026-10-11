@@ -99,4 +99,7 @@ chains:
                 password: {{ route.chain.password | to_json }}
             dialer:
               type: http2
+              tls:
+                secure: true
+                serverName: {{ route.chain.host | to_json }}
 {% endfor %}

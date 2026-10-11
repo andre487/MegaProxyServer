@@ -1,0 +1,27 @@
+---
+- name: Check managed HTTPS units
+  ansible.builtin.stat:
+    path: "/etc/systemd/system/{{ item }}"
+  loop: [megaproxy-gost.service, megaproxy-certbot-renew.timer]
+  register: megaproxy_https_units
+
+- name: Stop disabled HTTPS proxy and renewal timer
+  ansible.builtin.systemd_service:
+    name: "{{ item.item }}"
+    enabled: false
+    state: stopped
+  loop: "{{ megaproxy_https_units.results }}"
+  when: item.stat.exists and not ansible_check_mode
+
+- name: Stop the managed HTTPS SNI router
+  ansible.builtin.systemd_service:
+    name: haproxy
+    enabled: false
+    state: stopped
+  when: megaproxy_https_units.results[0].stat.exists and not ansible_check_mode
+
+- name: Remove disabled proxy credentials
+  ansible.builtin.file:
+    path: /opt/megaproxy/gost.yml
+    state: absent
+  no_log: true

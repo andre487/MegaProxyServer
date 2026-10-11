@@ -17,7 +17,3 @@ certbot_image_id="$(docker image inspect --format '{{ '{{' }}.Id{{ '}}' }}' 'cer
 
 cleanup_old_images gogost/gost "$gost_image_id"
 cleanup_old_images certbot/certbot "$certbot_image_id"
-
-docker image prune --force
-docker volume prune --force
-docker network prune --force

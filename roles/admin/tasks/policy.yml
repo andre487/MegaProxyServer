@@ -1,4 +1,8 @@
 ---
+- name: Finalize verified administrative key after bootstrap
+  ansible.builtin.include_tasks: account.yml
+  when: megaproxy_bootstrap_phase | default('') == 'policy'
+
 - name: Read current SSH connection context
   ansible.builtin.command: printenv SSH_CONNECTION
   become: false
@@ -82,3 +86,56 @@
     - name: Report rejected administrative SSH policy
       ansible.builtin.fail:
         msg: "Administrative SSH policy validation failed; the previous policy was restored"
+
+- name: Find previously managed administrative accounts
+  ansible.builtin.find:
+    paths: /etc/sudoers.d
+    patterns: megaproxy-*
+    file_type: file
+  register: megaproxy_admin_sudoers
+
+- name: Identify retired administrative logins
+  ansible.builtin.set_fact:
+    megaproxy_retired_admins: >-
+      {{ megaproxy_admin_sudoers.files | map(attribute='path') | map('basename')
+         | map('regex_replace', '^megaproxy-', '') | reject('equalto', megaproxy_admin.user) | list }}
+
+- name: Require verified new administrator before retiring old access
+  ansible.builtin.assert:
+    that:
+      - ansible_user == megaproxy_admin.user
+      - item is match('^[a-z_][a-z0-9_-]*$')
+      - item != 'root'
+    fail_msg: "Administrative migration must run through the new verified administrative account"
+  loop: "{{ megaproxy_retired_admins }}"
+
+- name: Inspect retired administrative accounts
+  ansible.builtin.command:
+    argv: [getent, passwd, "{{ item }}"]
+  loop: "{{ megaproxy_retired_admins }}"
+  register: megaproxy_retired_admin_accounts
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Close sessions of retired administrators
+  ansible.builtin.command:
+    argv: [pkill, -KILL, -u, "{{ item.item }}"]
+  loop: "{{ megaproxy_retired_admin_accounts.results }}"
+  when: item.rc == 0
+  register: megaproxy_retired_admin_sessions
+  failed_when: megaproxy_retired_admin_sessions.rc not in [0, 1]
+  changed_when: megaproxy_retired_admin_sessions.rc == 0
+
+- name: Remove retired administrative accounts while preserving their files
+  ansible.builtin.user:
+    name: "{{ item }}"
+    state: absent
+    remove: false
+  loop: "{{ megaproxy_retired_admins }}"
+
+- name: Remove retired administrative sudo privileges
+  ansible.builtin.file:
+    path: "/etc/sudoers.d/megaproxy-{{ item }}"
+    state: absent
+  loop: "{{ megaproxy_retired_admins }}"

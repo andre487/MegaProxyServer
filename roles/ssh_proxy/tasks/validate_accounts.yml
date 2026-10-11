@@ -1,0 +1,48 @@
+---
+- name: Inspect administrative group membership
+  ansible.builtin.command:
+    argv: [id, -Gn, --, "{{ megaproxy_admin.user }}"]
+  register: megaproxy_admin_groups
+  changed_when: false
+  check_mode: false
+
+- name: Keep administrative access outside the restricted proxy group
+  ansible.builtin.assert:
+    that: "'megaproxy' not in megaproxy_admin_groups.stdout.split()"
+    fail_msg: "The administrative account must not belong to the proxy group"
+
+- name: Require dedicated and safe SSH proxy logins
+  ansible.builtin.assert:
+    that:
+      - item is match('^[a-z_][a-z0-9_-]*$')
+      - item not in ['root', 'admin', 'ansible', 'ubuntu', 'debian', 'ec2-user', megaproxy_admin.user, megaproxy_admin.bootstrap_user | default('')]
+    fail_msg: "Refusing to modify an administrative or invalid proxy account"
+  loop: "{{ (megaproxy_services.ssh.users | map(attribute='name') | list) + (megaproxy_services.ssh.removed_users | default([])) }}"
+
+- name: Inspect existing proxy account ownership
+  ansible.builtin.command:
+    argv: [id, -gn, --, "{{ item }}"]
+  loop: "{{ (megaproxy_services.ssh.users | map(attribute='name') | list) + (megaproxy_services.ssh.removed_users | default([])) }}"
+  register: megaproxy_existing_accounts
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Refuse to modify accounts outside the managed proxy group
+  ansible.builtin.assert:
+    that: item.rc != 0 or item.stdout == 'megaproxy'
+    fail_msg: "Refusing to modify existing non-proxy account {{ item.item }}"
+  loop: "{{ megaproxy_existing_accounts.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+
+- name: Close sessions of retired proxy accounts
+  ansible.builtin.command:
+    argv: [pkill, -KILL, -u, "{{ item.item }}"]
+  loop: "{{ megaproxy_existing_accounts.results }}"
+  when:
+    - item.item in megaproxy_services.ssh.removed_users | default([])
+    - item.rc == 0
+  register: megaproxy_retired_sessions
+  failed_when: megaproxy_retired_sessions.rc not in [0, 1]
+  changed_when: megaproxy_retired_sessions.rc == 0

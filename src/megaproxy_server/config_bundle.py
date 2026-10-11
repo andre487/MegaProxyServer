@@ -4,7 +4,6 @@ from __future__ import annotations
 import json
 import os
 import re
-import tempfile
 from copy import deepcopy
 from pathlib import Path
 from typing import Any
@@ -14,7 +13,7 @@ from jsonschema import Draft202012Validator
 
 from .config_api import AccessDenied, MAX_RESPONSE, credential_bytes, derive_key, render_config, unlock, user_id
 from .export import _secret
-from .inventory import ROOT, https_jump_routes, https_profile_routes, https_routes, ssh_jump_routes
+from .inventory import ROOT, atomic_write, https_jump_routes, https_profile_routes, https_routes, ssh_jump_routes
 from .models import ConfigApiService, Inventory
 
 
@@ -24,8 +23,14 @@ def public_url(service: ConfigApiService) -> str:
     return f"https://{host}{port}{service.path}"
 
 
-def validate_config(document: dict[str, Any]) -> None:
+def validate_config(document: dict[str, Any], *, allow_legacy: bool = False) -> None:
     schema = json.loads((ROOT / "schemas/megaproxy-v8.schema.json").read_text())
+    if allow_legacy and document.get("version") == 7:
+        # Generated v7 exports use the common fields, without the v8 transports.
+        schema["properties"]["version"]["const"] = 7
+        if any(item.get("proxy", {}).get("type") not in {"HTTPS", "SSH", "SSH_JUMP"}
+               or "preferHttp3" in item.get("proxy", {}) for item in document.get("profiles", [])):
+            raise ValueError("Version 7 exports cannot contain version 8 transports")
     # Validation errors must never print a document containing credentials.
     errors = Draft202012Validator(schema).iter_errors(document)
     error = next(errors, None)
@@ -159,11 +164,4 @@ def write_bundle(inventory: Inventory, path: Path) -> None:
     if path.is_file() and path.read_text() == content:
         return
     path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-    fd, temporary = tempfile.mkstemp(dir=path.parent, prefix=".config-bundle-")
-    try:
-        with os.fdopen(fd, "w") as stream:
-            stream.write(content)
-        os.replace(temporary, path)
-    finally:
-        if os.path.exists(temporary):
-            os.unlink(temporary)
+    atomic_write(path, content)

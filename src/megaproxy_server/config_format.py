@@ -10,7 +10,8 @@ from typing import Any
 def profile(name: str, proxy: dict[str, Any], color: int, country_code: str = "", *, identity: str | None = None) -> dict[str, Any]:
     return {
         "id": str(uuid.uuid5(uuid.NAMESPACE_URL, f"dev.megaproxy.server/{identity if identity is not None else name}")),
-        "name": name, "color": color, "countryCode": country_code, "proxy": proxy,
+        "name": name, "color": color,
+        "countryCode": country_code if re.fullmatch(r"[A-Z]{2}", country_code) else "", "proxy": proxy,
         "tls": {"fingerprint": "DEFAULT", "customJa3": ""},
         "dns": {"provider": "CLOUDFLARE", "customDohUrl": ""},
         "routing": {"routeAllApps": True, "selectedPackages": [], "allowIpv6": False, "bypassLocalNetworks": True},
