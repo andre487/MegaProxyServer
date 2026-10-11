@@ -15,7 +15,7 @@ def inventory_file(tmp_path: Path) -> Path:
                 address="192.0.2.10",
                 admin=AdminAccess(user="deploy", private_key_file="/keys/admin", public_key="ssh-ed25519 AAAA admin"),
                 services=Services(
-                    https=HttpsService(
+                    https=HttpsService(title='amsterdam',
                         endpoint="proxy.example",
                         port=8443,
                         certificate="self-signed",
@@ -93,8 +93,8 @@ def test_chain_pair_title_is_used_in_all_client_formats(tmp_path: Path) -> None:
             ],
         ),
         hosts={
-            "entry_proxy": Host(address="entry.example", admin=admin, services=Services(https=HttpsService(endpoint="entry.example", certificate="domain", acme_email="a@example.com", users=[user], chain_entry=True, direct=False))),
-            "exit_proxy": Host(address="exit.example", admin=admin, services=Services(https=HttpsService(endpoint="exit.example", certificate="domain", acme_email="a@example.com", users=[user], chain_exit=True, chain_password="machine-password-long"))),
+            "entry_proxy": Host(address="entry.example", admin=admin, services=Services(https=HttpsService(title='ENTRY', endpoint="entry.example", certificate="domain", acme_email="a@example.com", users=[user], chain_entry=True, direct=False))),
+            "exit_proxy": Host(address="exit.example", admin=admin, services=Services(https=HttpsService(title='EXIT', endpoint="exit.example", certificate="domain", acme_email="a@example.com", users=[user], chain_exit=True, chain_password="machine-password-long"))),
         },
     )
     source = tmp_path / "inventory.yml"

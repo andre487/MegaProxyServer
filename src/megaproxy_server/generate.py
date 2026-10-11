@@ -6,7 +6,7 @@ from pathlib import Path
 from urllib.parse import quote, urlencode
 
 from .export import export_profiles
-from .inventory import https_routes, load
+from .inventory import https_profile_routes, load
 from .models import Inventory
 
 COLORS = ["#b9c6f6", "#eef209", "#3100f1", "#8b0000", "#00ced1", "#0f98cf"]
@@ -14,14 +14,11 @@ COLORS = ["#b9c6f6", "#eef209", "#3100f1", "#8b0000", "#00ced1", "#0f98cf"]
 
 def https_entries(inventory: Inventory) -> list[dict[str, object]]:
     entries = []
-    for host_name, host in inventory.hosts.items():
-        service = host.services.https
-        if not service or not service.enabled:
-            continue
-        for route in https_routes(inventory, host_name):
-            for user in service.users:
-                title = route["title"] if route["name"] != "direct" or service.title else host_name
-                entries.append({"title": f"{title} / {user.name}", "host": route["hostname"], "port": service.port, "username": user.name, "password": user.password, "country_code": route["country_code"]})
+    for host_name, route in https_profile_routes(inventory):
+        service = inventory.hosts[host_name].services.https
+        for user in service.users:
+            title = route["title"]
+            entries.append({"title": f"{title} / {user.name}", "host": route["hostname"], "port": service.port, "username": user.name, "password": user.password, "country_code": route["country_code"]})
     return entries
 
 

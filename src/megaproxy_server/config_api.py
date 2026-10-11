@@ -8,6 +8,7 @@ import hashlib
 import hmac
 import json
 import logging
+import re
 from copy import deepcopy
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
@@ -17,9 +18,9 @@ from cryptography.exceptions import InvalidTag
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 if __package__:
-    from .config_format import configuration, profile
+    from .config_format import configuration, https_jump_profile, profile
 else:
-    from config_format import configuration, profile
+    from config_format import configuration, https_jump_profile, profile
 
 ROBOTS = b"User-agent: *\nDisallow: /\n"
 MAX_RESPONSE = 1024 * 1024
@@ -67,21 +68,25 @@ def unlock(bundle: dict[str, Any], username: str, password: str) -> dict[str, An
 def render_config(bundle: dict[str, Any], username: str, password: str, client: str = "", *, url: str | None = None, interval: int = 60) -> dict[str, Any]:
     payload = unlock(bundle, username, password)
     profiles = []
+    chain_profiles = []
+    direct_https = {}
     for route in bundle["https_routes"]:
         proxy = {"type": "HTTPS", "host": route["host"], "port": route["port"],
                  "username": username, "password": password,
                  "allowInvalidProxyCertificate": route["allow_invalid_certificate"]}
         if route.get("http3_port") == route["port"]:
             proxy["preferHttp3"] = True
-        item = profile(f"{route['title']} / {username}", proxy, len(profiles), route["country_code"],
+        item = profile(route["title"], proxy, len(profiles), route["country_code"],
                        identity=json.dumps(["https", route["host_name"], route["route_name"], username]))
         options = deepcopy(payload["https_options"][json.dumps([route["host_name"], route["route_name"]])])
         item.update({k: v for k, v in options.items() if k != "proxy"})
         proxy.update(options.get("proxy", {}))
-        profiles.append(item)
+        (profiles if route["route_name"] == "direct" else chain_profiles).append(item)
+        if route["route_name"] == "direct":
+            direct_https[route["host_name"]] = item
         if route.get("http3_port") and route.get("masque_profiles"):
             masque = deepcopy(item)
-            generated = profile(f"{route['title']} MASQUE / {username}",
+            generated = profile(f"{item['name']} MASQUE",
                 dict(proxy, type="MASQUE", port=route["http3_port"]), len(profiles), route["country_code"],
                 identity=json.dumps(["masque", route["host_name"], route["route_name"], username]))
             masque.update({k: generated[k] for k in ("id", "name", "color", "proxy")})
@@ -93,33 +98,49 @@ def render_config(bundle: dict[str, Any], username: str, password: str, client: 
             {"type": "SOCKS5", "host": host["host"], "port": host["port"], "username": username, "password": password},
             len(profiles), identity=json.dumps(["socks5", host["name"], username])))
 
-    endpoints = []
+    endpoints = {}
     for host in bundle["ssh_hosts"]:
         for account in payload["ssh_accounts"]:
             proxy = {"type": "SSH", "host": host["address"], "port": host["port"],
                      "username": account["username"], "trustedHostKey": "", "acceptAnyHostKey": False,
                      "privateKey" if account["type"] == "key" else "password": account["secret"]}
-            item = profile(f"{host['name']} / {account['username']}", proxy, len(profiles),
+            item = profile(host["title"], proxy, len(profiles),
                            identity=json.dumps(["ssh", host["name"], account["username"]]))
             options = deepcopy(payload["ssh_options"][host["name"]])
             item.update({k: v for k, v in options.items() if k != "proxy"})
             proxy.update(options.get("proxy", {}))
-            profiles.append(item)
-            endpoints.append((host, account, proxy))
-    for destination, dst_account, dst_proxy in endpoints:
-        for jump, jump_account, jump_proxy in endpoints:
-            if destination["name"] == jump["name"]:
-                continue
+            if host.get("generate_profile", False):
+                profiles.append(item)
+            endpoints[(host["name"], account["username"])] = (host, account, proxy)
+    profiles.extend(chain_profiles)
+    for pair in bundle.get("https_jump_pairs", []):
+        profiles.append(https_jump_profile(
+            direct_https[pair["entry"]], direct_https[pair["exit"]], pair["title"],
+            pair["country_code"], len(profiles),
+            identity=json.dumps(["https_jump", pair["entry"], pair["exit"], username]),
+        ))
+
+    for pair in payload.get("ssh_jump_pairs", []):
+        for account in payload["ssh_accounts"]:
+            destination_endpoint = endpoints.get((pair["exit"], account["username"]))
+            jump_endpoint = endpoints.get((pair["entry"], account["username"]))
+            if destination_endpoint is None or jump_endpoint is None:
+                continue  # Only accounts explicitly linked to this HTTPS user are available.
+            destination, dst_account, dst_proxy = destination_endpoint
+            jump, jump_account, jump_proxy = jump_endpoint
             proxy = dict(dst_proxy, type="SSH_JUMP")
             proxy["jump"] = {k: v for k, v in jump_proxy.items() if k != "type"}
-            proxy["jump"]["sameAuthentication"] = False
+            proxy["jump"]["sameAuthentication"] = True
             item = profile(
-                f"{jump['name']}/{jump_account['username']} -> {destination['name']}/{dst_account['username']}",
-                proxy, len(profiles),
+                pair["title"], proxy, len(profiles),
+                pair["country_code"] if re.fullmatch(r"[A-Z]{2}", pair["country_code"]) else "",
                 identity=json.dumps(["ssh_jump", jump["name"], jump_account["username"], destination["name"], dst_account["username"]]),
             )
             item.update({k: v for k, v in deepcopy(payload["ssh_options"][destination["name"]]).items() if k != "proxy"})
             profiles.append(item)
+
+    for index, item in enumerate(profiles):
+        item["color"] = index
 
     result = configuration(profiles)
     result["version"] = 8

@@ -11,11 +11,11 @@ def sample_inventory() -> Inventory:
     ), hosts={
         "one": Host(address="192.0.2.1", admin=admin, services=Services(
             https=HttpsService(endpoint="proxy.example", title="ONE", certificate="domain", acme_email="a@example.com", users=[HttpsUser(name="alice", password="alice-password-long")], chain_entry=True),
-            ssh=SshService(users=[SshUser(name="mp-alice", authentication=SshAuthentication(type="password", password="ssh-password-long", password_hash="$6$secret-hash"))]),
+            ssh=SshService(title='SSH', users=[SshUser(name="mp-alice", authentication=SshAuthentication(type="password", password="ssh-password-long", password_hash="$6$secret-hash"))]),
         )),
         "two": Host(address="192.0.2.2", admin=admin, services=Services(
             https=HttpsService(endpoint="proxy-two.example", title="TWO", certificate="domain", acme_email="a@example.com", users=[HttpsUser(name="bob", password="bob-password-long")], chain_exit=True, chain_password="machine-password-long"),
-            ssh=SshService(users=[SshUser(name="mp-bob", authentication=SshAuthentication(type="key", public_key="ssh-ed25519 AAAA", generated_private_key="/keys/bob"))]),
+            ssh=SshService(title='SSH', users=[SshUser(name="mp-bob", authentication=SshAuthentication(type="key", public_key="ssh-ed25519 AAAA", generated_private_key="/keys/bob"))]),
         )),
     })
 

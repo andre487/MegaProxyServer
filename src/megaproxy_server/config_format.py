@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import uuid
+import re
+from copy import deepcopy
 from typing import Any
 
 
@@ -26,3 +28,18 @@ def configuration(profiles: list[dict[str, Any]]) -> dict[str, Any]:
         "routing": {"routeAllApps": True, "selectedPackages": [], "bypassLocalNetworks": True},
         "profiles": profiles,
     }
+
+
+def https_jump_profile(entry: dict[str, Any], exit_profile: dict[str, Any], name: str,
+                       country_code: str, color: int, *, identity: str) -> dict[str, Any]:
+    item = deepcopy(exit_profile)
+    proxy = item["proxy"]
+    proxy["type"] = "HTTPS_JUMP"
+    proxy["jump"] = {k: v for k, v in entry["proxy"].items()
+                     if k in {"host", "port", "allowInvalidProxyCertificate"}}
+    proxy["jump"]["sameAuthentication"] = True
+    proxy["preferHttp3"] = bool(proxy.get("preferHttp3") and entry["proxy"].get("preferHttp3"))
+    generated = profile(name, proxy, color,
+                        country_code if re.fullmatch(r"[A-Z]{2}", country_code) else "", identity=identity)
+    item.update({k: generated[k] for k in ("id", "name", "color", "countryCode")})
+    return item

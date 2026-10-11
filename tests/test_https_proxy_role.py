@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 def test_rendered_transports_and_firewall_are_opt_in():
     inv = Inventory.model_validate({"hosts": {"one": {"address": "192.0.2.1",
         "admin": {"user": "deploy", "private_key_file": "/keys/admin", "public_key": "ssh-ed25519 TEST"},
-        "services": {"https": {"endpoint": "proxy.example", "certificate": "self-signed",
+        "services": {"https": {"title": "HTTPS", "endpoint": "proxy.example", "certificate": "self-signed",
             "users": [{"name": "alice", "password": "long-test-password"}]}}}}})
     env = Environment(undefined=StrictUndefined)
     env.filters["to_json"] = json.dumps

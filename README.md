@@ -56,9 +56,11 @@ Install the client using its [installation guide](https://github.com/andre487/An
 transfer `.generated/configs/MegaProxy.json` privately, and import it in the app. Select a profile,
 run **Test**, verify any SSH host-key prompt, then connect and approve Android VPN access.
 
-The current server exporter produces JSON v7, accepted by the current Android v8 importer.
-Server-side SNI chains are exported as ordinary HTTPS profiles. The app also supports client-side
-**HTTPS with Jump**, which must currently be configured in the app. See the
+The exporter produces JSON v7 for basic profiles and v8 when HTTPS Jump, HTTP/3 or SOCKS5
+is configured; the configuration API always returns v8. Server-side SNI chains are ordinary
+HTTPS profiles. Client-side SSH and HTTPS Jump profiles use only declared inventory pairs.
+Direct SSH profiles require `services.ssh.generate_profile: true` (default: false).
+See the [complete jump inventory example](inventory.jumps.example.yml) and the
 [English](docs/en/README.md#android-megaproxy) or [Russian](docs/ru/README.md#android-megaproxy)
 guide for chain setup and reimport behavior.
 
@@ -67,7 +69,7 @@ guide for chain setup and reimport behavior.
 - HTTPS CONNECT proxy with TLS 1.2/1.3 and optional probe-resistant decoy responses
 - ACME certificates for DNS names and public IP addresses, plus a self-signed fallback
 - SNI-based HTTPS chains through independently selected entry and exit servers
-- Restricted SSH forwarding accounts and dynamic SSH jump profiles
+- Restricted SSH forwarding accounts and explicit SSH and HTTPS jump profiles
 - Global HTTPS and SSH users, with safe removal across every managed host
 - Inline Ansible Vault encryption that leaves non-secret inventory settings readable
 - Idempotent provisioning and integration tests on Ubuntu and Debian

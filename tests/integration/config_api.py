@@ -40,7 +40,7 @@ def main() -> None:
             public_port = reservation.getsockname()[1]
         inventory = Inventory.model_validate({"users": {"https": [{"name": "tester", "password": "test-password-123456789"}]}, "hosts": {
             "de_proxy": {"address": "192.0.2.1", "admin": {"user": "deploy", "private_key_file": "/keys/admin", "public_key": "ssh-ed25519 TEST"},
-                         "services": {"https": {"endpoint": "proxy.example", "certificate": "domain", "acme_email": "test@example.com"}}},
+                         "services": {"https": {"title": "HTTPS", "endpoint": "proxy.example", "certificate": "domain", "acme_email": "test@example.com"}}},
             "config": {"address": "127.0.0.1", "admin": {"user": "deploy", "private_key_file": "/keys/admin", "public_key": "ssh-ed25519 TEST"},
                        "services": {"config_api": {"endpoint": "localhost", "port": public_port, "acme_email": "test@example.com"}}},
         }})

@@ -10,6 +10,7 @@ hosts:
     # address и admin как у обычного прокси
     services:
       https:
+        title: EXAMPLE
         endpoint: proxy.example.com
         certificate: domain
         acme_email: admin@example.com
@@ -46,6 +47,8 @@ HTTP/3 включается только на прямых маршрутах. �
 цепочку в прямой маршрут. В нашем inventory HTTP/3 на хостах `cpx-*` выключен.
 Клиентские HTTPS_JUMP-профили могут описывать два прямых HTTPS/MASQUE endpoint;
 их поддержку и fallback реализует клиент согласно контракту MegaProxyConfig.
+Такие профили генерируются из `settings.https_jump_pairs`; `preferHttp3` включается
+только когда HTTP/3 предпочитается на обоих узлах. См. [настройку jump-пар](config-api.md#явные-jump-пары).
 
 Маскировка GOST (`probe_resistance`) относится к HTTPS/TCP. Она сохраняет сайт-приманку,
 robots.txt и настроенные knock-хосты. На UDP/MASQUE knock и сайт-приманка не применяются.
@@ -71,7 +74,8 @@ Firewall открывает TCP `port` и заданный диапазон UDP-
 API автоматически выдаёт SOCKS5-профили только для включённых хостов. Firefox и
 Android получают профили с реквизитами; Chromium их пропускает, поскольку не
 поддерживает SOCKS5-аутентификацию. ProxyList/SuperProxy/FoxyProxy остаются HTTPS-экспортами;
-новые транспорты включаются в MegaProxy JSON v8. Без них прежний JSON остаётся v7.
+новые транспорты и клиентский HTTPS Jump включаются в MegaProxy JSON v8.
+Без HTTP/3, SOCKS5 и HTTPS Jump файловый экспорт остаётся v7; API всегда выдаёт v8.
 
 ## Проверка
 
