@@ -27,11 +27,14 @@ administrative key on your computer before confirming provisioning. See the
 
 ### Manage servers from another machine
 
-Requirements: macOS or Linux, Python 3.12+, `uv`, OpenSSH, and a Debian or Ubuntu server reachable through a
+Requirements: macOS or Linux, Git, Python 3.12+, `uv`, OpenSSH, and a Debian or Ubuntu server reachable through a
 sudo-capable SSH account.
 
 ```shell
+git clone https://github.com/andre487/MegaProxyServer.git
+cd MegaProxyServer
 ./mega-proxy inventory
+./mega-proxy bootstrap
 ./mega-proxy plan
 ./mega-proxy apply
 ./mega-proxy verify
@@ -84,7 +87,10 @@ See [`inventory.example.yml`](inventory.example.yml) and the
 ```
 
 This runs Ruff, pytest, Python byte-compilation and Ansible syntax checks with dependencies locked
-in `uv.lock`.
+in `uv.lock`. Separate GitHub Actions jobs test real GOST/nginx and Ubuntu/Debian LXD
+provisioning; `check` does not run these integrations. See the
+[English](docs/en/README.md#development-and-troubleshooting) or
+[Russian](docs/ru/README.md#разработка-и-диагностика) guide for coverage and `main` protection.
 
 ## License
 
