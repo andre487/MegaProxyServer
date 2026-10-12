@@ -491,6 +491,27 @@ def test_http_access_robots_and_conditional_authentication(inventory, tmp_path, 
     assert capsys.readouterr().err == ""
 
 
+@pytest.mark.parametrize("client", ["", "android", "android_megaproxy", "browser_chromium", "browser_firefox", "unknown"])
+def test_api_omits_local_defaults_and_app_routing(inventory, client):
+    alice = inventory.users.https[0]
+    bundle = build_bundle(inventory)
+    document = render_config(bundle, alice.name, alice.password, client, url=bundle["urls"][0])
+    validate_config(document)
+    assert not {"routing", "tls", "ssh", "failover", "diagnosticLogLimitMb"} & document.keys()
+    assert all(not {"routing", "tls", "dns"} & item.keys() for item in document["profiles"])
+    assert document["subscription"]["fallbackUrls"] == bundle["urls"][1:]
+    inventory.settings.client_config = {
+        "routing": {"routeAllApps": True, "selectedPackages": []},
+        "profiles": [{"id": "manual", "proxy": {"type": "HTTPS", "host": "manual.example", "port": 443},
+                      "routing": {"routeAllApps": True, "selectedPackages": []}}],
+    }
+    inventory.hosts["de_entry"].services.https.client_profile = {"routing": {"routeAllApps": True}}
+    document = render_config(build_bundle(inventory), alice.name, alice.password, client)
+    validate_config(document)
+    assert "routing" not in document
+    assert all("routing" not in item for item in document["profiles"])
+
+
 def test_all_config_fields_and_client_projection(inventory):
     inventory.settings.client_config = {
         "activeProfileId": "manual-jump", "alwaysOnProfileId": "manual-masque", "diagnosticLogLimitMb": 20,
@@ -519,19 +540,21 @@ def test_all_config_fields_and_client_projection(inventory):
     full = render_config(bundle, alice.name, alice.password)
     validate_config(full)
     assert {item["proxy"]["type"] for item in full["profiles"]} == {"HTTPS", "SSH", "SSH_JUMP", "HTTPS_JUMP", "SOCKS5", "MASQUE"}
-    assert full["activeProfileId"] == "manual-jump"
+    assert not {"activeProfileId", "alwaysOnProfileId", "ssh", "failover", "browser", "diagnosticLogLimitMb", "routing"} & full.keys()
+    assert all("dns" not in item and "routing" not in item for item in full["profiles"])
+    assert "bypass" not in full["profiles"][0]["browser"]
+    assert full["profiles"][0]["browser"]["authMode"] == "challenge"
     assert full["profiles"][0]["browser"]["knockHost"] == "knock.example"
     assert full["tls"]["customJa3"] != full["profiles"][-1]["tls"]["customJa3"]
     browser = render_config(bundle, alice.name, alice.password, "browser_firefox")
     assert {item["proxy"]["type"] for item in browser["profiles"]} == {"HTTPS", "SOCKS5"}
-    assert browser["activeProfileId"] == browser["profiles"][0]["id"]
-    assert browser["browser"]["routing"]["assignments"] == []
+    assert "activeProfileId" not in browser and "browser" not in browser
     assert "browser" not in render_config(bundle, alice.name, alice.password, "android")
     baseline = json.loads((Path(__file__).parents[1] / "schemas/android-v8.schema.json").read_text())
     Draft202012Validator(baseline).validate(render_config(bundle, alice.name, alice.password, "android"))
 
 
-@pytest.mark.parametrize("override", [{"activeProfileId": "missing"}, {"diagnosticLogLimitMb": 0}, {"subscription": {"url": "https://untrusted.example"}}, {"profiles": [{"id": "bad", "proxy": {"type": "HTTP", "host": "example.com", "port": 80}}]}])
+@pytest.mark.parametrize("override", [{"tls": {"fingerprint": "INVALID"}}, {"subscription": {"url": "https://untrusted.example"}}, {"profiles": [{"id": "bad", "proxy": {"type": "HTTP", "host": "example.com", "port": 80}}]}])
 def test_invalid_config_fields_fail_before_deployment(inventory, override):
     inventory.settings.client_config = override
     with pytest.raises(ValueError):
@@ -573,7 +596,7 @@ def test_bootstrap_pause_and_secret_export_preferences(inventory):
             assert "password" not in node and "privateKey" not in node
     inventory.users.https[0].client_config = {"subscription": None}
     bundle = build_bundle(inventory)
-    assert render_config(bundle, alice.name, alice.password, url=bundle["urls"][0])["subscription"] is None
+    assert render_config(bundle, alice.name, alice.password, url=bundle["urls"][0])["subscription"]["url"] == bundle["urls"][0]
 
 
 def test_schema_lock_is_pinned_and_matches_committed_files():
