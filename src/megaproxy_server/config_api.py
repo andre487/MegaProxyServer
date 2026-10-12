@@ -143,9 +143,16 @@ def render_config(bundle: dict[str, Any], username: str, password: str, client: 
         item["color"] = index
 
     result = configuration(profiles)
+    for key in ("routing", "tls", "ssh", "failover", "diagnosticLogLimitMb"):
+        result.pop(key, None)
+    defaults = profile("", {}, 0)
+    for item in profiles:
+        for key in ("tls", "dns"):
+            if item.get(key) == defaults[key]:
+                item.pop(key)
     result["version"] = 8
     overrides = payload["client_config"]
-    result.update({k: v for k, v in overrides.items() if k != "profiles"})
+    result.update({k: v for k, v in overrides.items() if k in {"tls", "passwordsIncluded", "privateKeysIncluded"}})
     result["profiles"] = profiles + overrides.get("profiles", [])
     if client in {"browser_chromium", "browser_firefox"}:
         supported = []
@@ -164,7 +171,6 @@ def render_config(bundle: dict[str, Any], username: str, password: str, client: 
         result["profiles"] = supported
         for key in ("tls", "ssh", "failover", "alwaysOnProfileId", "diagnosticLogLimitMb"):
             result.pop(key, None)
-        result["routing"] = {"bypassLocalNetworks": result.get("routing", {}).get("bypassLocalNetworks", True)}
         result["privateKeysIncluded"] = False
     elif client in {"android", "android_megaproxy"}:
         result.pop("browser", None)
@@ -174,24 +180,13 @@ def render_config(bundle: dict[str, Any], username: str, password: str, client: 
     ids = {item["id"] for item in result["profiles"]}
     if not ids or len(ids) != len(result["profiles"]) or len(ids) > 1000:
         raise AccessDenied("No usable configuration")
-    if client in {"browser_chromium", "browser_firefox", "android", "android_megaproxy"}:
-        for key in ("activeProfileId", "alwaysOnProfileId"):
-            if result.get(key) is not None and result[key] not in ids:
-                result[key] = result["profiles"][0]["id"] if key == "activeProfileId" else None
-        if "failover" in result:
-            result["failover"]["profileIds"] = [identity for identity in result["failover"].get("profileIds", []) if identity in ids]
-        routing = result.get("browser", {}).get("routing", {})
-        if "assignments" in routing:
-            routing["assignments"] = [item for item in routing["assignments"] if item["profileId"] in ids]
-    subscription_options = overrides.get("subscription", {})
-    if url and subscription_options is not None:
+    subscription_options = overrides.get("subscription") or {}
+    if url:
         result["subscription"] = {
             "url": url, "fallbackUrls": [endpoint for endpoint in bundle["urls"] if endpoint != url],
             "username": username, "password": password, "intervalMinutes": interval, "enabled": True,
         }
         result["subscription"].update(subscription_options)
-    elif subscription_options is not None:
-        result.pop("subscription", None)
     for item in result["profiles"]:
         proxy = item["proxy"]
         for node in (proxy, proxy.get("jump", {})):
@@ -201,6 +196,16 @@ def render_config(bundle: dict[str, Any], username: str, password: str, client: 
                 node.pop("privateKey", None)
     if not result.get("passwordsIncluded", True) and result.get("subscription"):
         result["subscription"].pop("password", None)
+    result.pop("routing", None)
+    for item in result["profiles"]:
+        for key in tuple(item):
+            if key not in {"id", "name", "color", "countryCode", "proxy", "tls", "browser"}:
+                item.pop(key)
+        if "browser" in item:
+            item["browser"] = {k: v for k, v in item["browser"].items()
+                               if k in {"knockHost", "authMode", "masqueTemplate"}}
+            if not item["browser"]:
+                item.pop("browser")
     return result
 
 

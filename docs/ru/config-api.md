@@ -183,7 +183,15 @@ SOCKS5-профили генерируются только при `socks5.enabl
 [lock-файле](../../schemas/megaproxy-config.lock.json). Проверки работают без скачивания `main`.
 Выбор 403 вместо стандартного 401 с Basic challenge сделан намеренно по политике этого API.
 
-Ответ — полный снимок со стабильными ID, без дополнительной обёртки и перенаправлений.
+Ответ — снимок профилей со стабильными ID, без дополнительной обёртки и перенаправлений.
+API не выдаёт root/profile `routing`, даже если он задан через `client_config` или
+`client_profile`: split tunneling, IPv6 и обход локальных сетей настраиваются клиентом.
+API не выдаёт DNS, общие SSH-настройки, failover, active/always-on IDs, лимит логов,
+общий `browser` и `profiles[].browser.bypass`, даже при явной настройке в inventory.
+Явные TLS/JA3 сохраняются как параметры серверного handshake; автоматические TLS
+не включаются. У профилей передаются ID, имя, цвет, страна, proxy, явные TLS и
+технические browser-поля: `knockHost`, `authMode`, `masqueTemplate`.
+Отсутствие поля в ответе требует от клиента сохранять локальную настройку при обновлении.
 ID генерируемого API-профиля зависит от логического хоста, маршрута и аккаунта;
 смена отображаемого title или endpoint сохраняет ID.
 Он содержит `subscription`: URL отвечающего экземпляра, остальные равноправные URL
@@ -207,36 +215,26 @@ If-Modified-Since без ETag приводит к обычной выдаче п
 
 Персональный выбор профиля, пауза и расписание обновлений, rollback, уведомления и
 сохранение профилей вне подписки выполняются клиентом согласно контракту. API не хранит
-клиентские сессии и возвращает данные для этих алгоритмов, включая `activeProfileId`.
+клиентские сессии. Выбор active/always-on профиля остаётся локальным.
 
-## Все документированные поля настроек
+## Настройки выдачи API
 
-В `settings.client_config` задаются общие root-поля v8, в `users.https[].client_config` —
+В `settings.client_config` задаются общие параметры, в `users.https[].client_config` —
 персональные изменения. Персональный объект заменяет одноимённое root-поле целиком.
-TLS/JA3, SSH, DNS, маршрутизация Android и браузеров, failover, active/always-on IDs,
-WebRTC, theme/language и подписки списков сохраняются в соответствующей проекции.
+API использует `profiles`, явные `tls`, флаги наличия реквизитов и начальные параметры
+`subscription`. Остальные root-поля не передаются; пользователь настраивает их в приложении.
 
 ```yaml
 settings:
   client_config:
-    routing:
-      bypassLocalNetworks: true
-    browser:
-      theme: system
-      language: auto
-      routing:
-        enabled: true
-        mode: domains
-        strategy: lists
-        subscriptions:
-          domainSources: [youtube]
-          siteSources: []
-          autoUpdate: true
-          throughProxy: false
     subscription:
       intervalMinutes: 60
       enabled: true
 ```
+
+Интервал и включение подписки нужны только для bootstrap: при последующих обновлениях
+клиент должен сохранять пользовательские значения. URL и реквизиты подписки выдаются
+независимо от `client_config.subscription: null`.
 
 `client_config.profiles` добавляет дополнительные полностью описанные профили v8 со
 стабильными ID. Это позволяет описать дополнительные HTTPS_JUMP, SOCKS5 и MASQUE endpoints,
@@ -246,17 +244,16 @@ settings:
 общие настройки не могут обойти эту проверку.
 
 Для генерируемых профилей можно задать `services.https.client_profile` или
-`services.ssh.client_profile`: например `tls`, `dns`, `routing`, `browser.bypass`,
-`browser.knockHost` и `proxy.preferHttp3`. Endpoint, тип, реквизиты, ID и имя генерируемого
+`services.ssh.client_profile`: например `tls`, `browser.knockHost`, `browser.authMode`,
+`browser.masqueTemplate` и `proxy.preferHttp3`. Endpoint, тип, реквизиты, ID и имя генерируемого
 профиля этими полями не меняются. Первый настроенный knock-host маршрута добавляется
-автоматически; явный `browser.knockHost` имеет приоритет. Browser tab-routing передаётся
-без переинтерпретации: Chromium сообщает о несовместимости и применяет свой алгоритм.
+автоматически; явный `browser.knockHost` имеет приоритет.
 
 `passwordsIncluded: false` исключает пароли из профилей, jump-узлов и bootstrap подписки;
 `privateKeysIncluded: false` исключает SSH-ключи. Значения по умолчанию — true, поскольку
 это персональная авторизованная выдача. `client_config.subscription` допускает только
 `intervalMinutes`, `enabled` или null; URL и реквизиты формируются из inventory и запроса.
-Null выдаёт явное удаление подписки для ручного импорта. `schema` и `version` фиксированы.
+Null не удаляет адреса подписки из ответа API. `schema` и `version` фиксированы.
 
 Пакет проверяется до установки: типы полей, уникальность и ссылки ID, совместимость проекций,
 непустые снимки, максимум 1 000 профилей и 1 MiB ответа. Семантику JA3, MASQUE templates и
