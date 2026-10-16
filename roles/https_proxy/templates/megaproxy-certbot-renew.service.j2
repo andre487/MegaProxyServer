@@ -5,5 +5,5 @@ Requires=docker.service
 
 [Service]
 Type=oneshot
-ExecStart=/usr/bin/docker run --rm --network host -v /etc/letsencrypt:/etc/letsencrypt -v /var/lib/letsencrypt:/var/lib/letsencrypt certbot/certbot:{{ megaproxy_services.https.certbot_version }} renew --quiet
+ExecStart=/usr/bin/docker run --rm --network host -v /etc/letsencrypt:/etc/letsencrypt -v /var/lib/letsencrypt:/var/lib/letsencrypt certbot/certbot:{{ megaproxy_services.https.certbot_version }} renew --cert-name {{ megaproxy_services.https.endpoint }} --quiet
 ExecStartPost=/usr/bin/systemctl try-restart megaproxy-gost.service

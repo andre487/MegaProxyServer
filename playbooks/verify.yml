@@ -256,7 +256,7 @@
           - --proxy
           - "https://{{ megaproxy_services.https.endpoint }}:{{ megaproxy_services.https.port }}"
           - --proxy-user
-          - "{{ megaproxy_services.https.users[0].name }}:{{ megaproxy_services.https.users[0].password }}"
+          - "{{ megaproxy_services.https.users[0].name | urlencode }}:{{ megaproxy_services.https.users[0].password | urlencode }}"
           - "https://example.com/"
       register: authenticated_connect
       changed_when: false
@@ -269,9 +269,7 @@
     - name: Require successful authenticated HTTPS CONNECT
       ansible.builtin.assert:
         that:
-          - >-
-            authenticated_connect.rc == 0 or
-            'CONNECT tunnel established, response 200' in authenticated_connect.stderr
+          - authenticated_connect.rc == 0
         fail_msg: >-
           Authenticated CONNECT was not established. The curl output is hidden because it may
           contain proxy credentials; inspect the GOST service journal for authentication errors.
@@ -286,11 +284,12 @@
           - --fail
           - --max-time
           - "30"
+          - --proxytunnel
           - --proxy-insecure
           - --proxy
           - "https://{{ item.hostname }}:{{ megaproxy_services.https.port }}"
           - --proxy-user
-          - "{{ megaproxy_services.https.users[0].name }}:{{ megaproxy_services.https.users[0].password }}"
+          - "{{ megaproxy_services.https.users[0].name | urlencode }}:{{ megaproxy_services.https.users[0].password | urlencode }}"
           - http://api.ipify.org/
       loop: "{{ megaproxy_services.get('https', {}).get('routes', []) | selectattr('chain') | list }}"
       register: chain_entry_ips
@@ -308,11 +307,12 @@
           - --fail
           - --max-time
           - "30"
+          - --proxytunnel
           - --proxy-insecure
           - --proxy
           - "https://{{ item.chain.host }}:{{ item.chain.port }}"
           - --proxy-user
-          - "{{ megaproxy_services.https.users[0].name }}:{{ megaproxy_services.https.users[0].password }}"
+          - "{{ megaproxy_services.https.users[0].name | urlencode }}:{{ megaproxy_services.https.users[0].password | urlencode }}"
           - http://api.ipify.org/
       loop: "{{ megaproxy_services.get('https', {}).get('routes', []) | selectattr('chain') | list }}"
       register: chain_exit_ips
