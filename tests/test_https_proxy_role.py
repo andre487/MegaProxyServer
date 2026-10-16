@@ -119,3 +119,47 @@ def test_docker_cleanup_runs_after_docker_service_changes() -> None:
     assert "cleanup_old_images gogost/gost" in cleanup
     assert "cleanup_old_images certbot/certbot" in cleanup
     assert "megaproxy_services.https.certbot_version" in cleanup
+
+
+def test_verify_curl_preserves_percent_encoded_credentials():
+    import base64
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+    import subprocess as sp
+    from threading import Thread
+
+    tasks = YAML(typ="safe").load((ROOT / "playbooks/verify.yml").read_text())[0]["tasks"]
+    probes = [task["ansible.builtin.command"]["argv"] for task in tasks
+              if isinstance(task.get("ansible.builtin.command"), dict)
+              and isinstance(task["ansible.builtin.command"].get("argv"), list)
+              and "--proxy-user" in task["ansible.builtin.command"]["argv"]]
+    assert len(probes) == 3
+    assert all("--proxytunnel" in probe for probe in probes if "http://api.ipify.org/" in probe)
+    user = {"name": "test%2Fuser", "password": "test%C2:pass%40word"}
+    variables = {"megaproxy_services": {"https": {"users": [user]}}}
+    env = Environment(undefined=StrictUndefined)
+    credentials = {env.from_string(probe[probe.index("--proxy-user") + 1]).render(**variables)
+                   for probe in probes}
+    assert len(credentials) == 1
+    received = []
+
+    class Proxy(BaseHTTPRequestHandler):
+        def do_GET(self):
+            received.append(self.headers.get("Proxy-Authorization"))
+            self.send_response(200)
+            self.end_headers()
+
+        def log_message(self, *args):
+            pass
+
+    with HTTPServer(("127.0.0.1", 0), Proxy) as proxy:
+        proxy.timeout = 5
+        worker = Thread(target=proxy.handle_request, daemon=True)
+        worker.start()
+        result = sp.run(["curl", "--silent", "--show-error", "--fail", "--max-time", "5",
+                         "--noproxy", "", "--proxy", f"http://127.0.0.1:{proxy.server_port}",
+                         "--proxy-user", credentials.pop(), "http://example.invalid/"],
+                        capture_output=True, text=True, timeout=10)
+        worker.join(5)
+    assert result.returncode == 0, result.stderr
+    expected = base64.b64encode(f'{user["name"]}:{user["password"]}'.encode()).decode()
+    assert received == [f"Basic {expected}"]
