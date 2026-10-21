@@ -83,8 +83,7 @@ def test_generated_transports_are_opt_in_and_client_compatible(inventory, tmp_pa
     bundle = build_bundle(inventory)
     document = render_config(bundle, alice.name, alice.password)
     https = [p["proxy"] for p in document["profiles"] if p["proxy"]["type"] == "HTTPS"]
-    assert https[0]["preferHttp3"] is True
-    assert "preferHttp3" not in https[2]  # Never bypass a server-side chain via direct QUIC.
+    assert all("preferHttp3" not in proxy for proxy in https)
     assert all(p["proxy"]["type"] != "MASQUE" for p in document["profiles"])
     assert sum(p["proxy"]["type"] == "SOCKS5" for p in document["profiles"]) == 1
     entry.masque_profiles = True
@@ -112,6 +111,7 @@ def test_generated_transports_are_opt_in_and_client_compatible(inventory, tmp_pa
     exported = json.loads(path.read_text())
     assert exported["version"] == 8
     validate_config(exported)
+    assert all("preferHttp3" not in p["proxy"] for p in exported["profiles"])
     assert {p["proxy"]["type"] for p in exported["profiles"]} >= {"SOCKS5", "MASQUE"}
 
 
