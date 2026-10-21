@@ -74,8 +74,6 @@ def render_config(bundle: dict[str, Any], username: str, password: str, client: 
         proxy = {"type": "HTTPS", "host": route["host"], "port": route["port"],
                  "username": username, "password": password,
                  "allowInvalidProxyCertificate": route["allow_invalid_certificate"]}
-        if route.get("http3_port") == route["port"]:
-            proxy["preferHttp3"] = True
         item = profile(route["title"], proxy, len(profiles), route["country_code"],
                        identity=json.dumps(["https", route["host_name"], route["route_name"], username]))
         options = deepcopy(payload["https_options"][json.dumps([route["host_name"], route["route_name"]])])

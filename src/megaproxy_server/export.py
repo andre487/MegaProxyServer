@@ -5,8 +5,15 @@ import re
 from pathlib import Path
 from typing import Any
 
-from .config_format import configuration, https_jump_profile, profile as _profile
-from .inventory import atomic_write, https_jump_routes, https_profile_routes, https_routes, ssh_jump_routes
+from .config_format import configuration, https_jump_profile
+from .config_format import profile as _profile
+from .inventory import (
+    atomic_write,
+    https_jump_routes,
+    https_profile_routes,
+    https_routes,
+    ssh_jump_routes,
+)
 from .models import Host, Inventory, SshUser
 
 
@@ -66,8 +73,6 @@ def export_profiles(inventory: Inventory, output: Path, include_all_jumps: bool 
                     title = route["title"]
                     name = f"{title} / {user.name}"
                     proxy = {"type": "HTTPS", "host": route["hostname"], "port": https.port, "username": user.name, "password": user.password, "allowInvalidProxyCertificate": https.certificate == "self-signed", "sshProfile": "DEFAULT", "trustedHostKey": "", "acceptAnyHostKey": False}
-                    if route["http3_port"] == https.port:
-                        proxy["preferHttp3"] = True
                     item = _profile(name, proxy, len(profiles), route["country_code"],
                         identity=json.dumps(["https", host_name, route["name"], user.name]))
                     resistance = route["probe_resistance"]
