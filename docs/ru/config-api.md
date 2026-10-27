@@ -244,10 +244,13 @@ settings:
 общие настройки не могут обойти эту проверку.
 
 Для генерируемых профилей можно задать `services.https.client_profile` или
-`services.ssh.client_profile`: например `tls`, `browser.knockHost`, `browser.authMode`,
+`services.ssh.client_profile`: например `tls`, `proxy.knockHost`, `browser.authMode`,
 `browser.masqueTemplate` и `proxy.preferHttp3`. Endpoint, тип, реквизиты, ID и имя генерируемого
 профиля этими полями не меняются. Первый настроенный knock-host маршрута добавляется
-автоматически; явный `browser.knockHost` имеет приоритет.
+автоматически; явный `proxy.knockHost` имеет приоритет, включая пустую строку для отключения.
+Старый `browser.knockHost` читается при отсутствии общего поля; браузерный ответ
+содержит совместимый псевдоним с тем же значением. Старые bundle не требуют
+перегенерации: API переносит прежний хост в общее поле при выдаче.
 
 `passwordsIncluded: false` исключает пароли из профилей, jump-узлов и bootstrap подписки;
 `privateKeysIncluded: false` исключает SSH-ключи. Значения по умолчанию — true, поскольку
@@ -309,7 +312,7 @@ uv run --frozen python tests/integration/config_api.py --nginx /path/to/nginx
 
 Knock host для замаскированного HTTPS-прокси задаётся в inventory:
 `services.https.probe_resistance.knock: [knock.example.com]`.
-При включённом маскировании первый хост списка становится `browser.knockHost` в API и файловом экспорте MegaProxy;
+При включённом маскировании первый хост списка становится общим `proxy.knockHost` в API (в том числе для Android) и файловом экспорте MegaProxy;
 для MASQUE он не применяется. Мастер настройки запрашивает его при включении маскирования.
 Серверные цепочки наследуют настройку entry, если у пары нет своего `probe_resistance`.
 После изменения примените HTTPS-настройки на прокси и обновите bundle API.

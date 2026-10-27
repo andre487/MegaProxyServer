@@ -18,9 +18,9 @@ from cryptography.exceptions import InvalidTag
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 if __package__:
-    from .config_format import configuration, https_jump_profile, profile
+    from .config_format import configuration, https_jump_profile, normalize_knock_host, profile
 else:
-    from config_format import configuration, https_jump_profile, profile
+    from config_format import configuration, https_jump_profile, normalize_knock_host, profile
 
 ROBOTS = b"User-agent: *\nDisallow: /\n"
 MAX_RESPONSE = 1024 * 1024
@@ -89,6 +89,7 @@ def render_config(bundle: dict[str, Any], username: str, password: str, client: 
                 identity=json.dumps(["masque", route["host_name"], route["route_name"], username]))
             masque.update({k: generated[k] for k in ("id", "name", "color", "proxy")})
             masque["proxy"].pop("preferHttp3", None)
+            masque["proxy"].pop("knockHost", None)
             masque.pop("browser", None)  # MASQUE does not use HTTPS knock hosts.
             profiles.append(masque)
     for host in bundle.get("socks5_hosts", []):
@@ -152,6 +153,8 @@ def render_config(bundle: dict[str, Any], username: str, password: str, client: 
     overrides = payload["client_config"]
     result.update({k: v for k, v in overrides.items() if k in {"tls", "passwordsIncluded", "privateKeysIncluded"}})
     result["profiles"] = profiles + overrides.get("profiles", [])
+    for item in result["profiles"]:
+        normalize_knock_host(item)
     if client in {"browser_chromium", "browser_firefox"}:
         supported = []
         for item in result["profiles"]:
@@ -164,7 +167,7 @@ def render_config(bundle: dict[str, Any], username: str, password: str, client: 
             ):
                 continue
             projected = {k: v for k, v in item.items() if k not in {"tls", "dns", "routing"}}
-            projected["proxy"] = {k: v for k, v in proxy.items() if k in {"type", "host", "port", "username", "password"}}
+            projected["proxy"] = {k: v for k, v in proxy.items() if k in {"type", "host", "port", "username", "password", "knockHost"}}
             supported.append(projected)
         result["profiles"] = supported
         for key in ("tls", "ssh", "failover", "alwaysOnProfileId", "diagnosticLogLimitMb"):

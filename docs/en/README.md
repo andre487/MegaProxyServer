@@ -277,7 +277,10 @@ probe_resistance:
   mode: local_decoy
   knock: [knock.example.com]
 ```
-When probe resistance is enabled, the first host becomes `browser.knockHost` in API and MegaProxy file profiles.
+When probe resistance is enabled, the first host becomes shared `proxy.knockHost` in API and MegaProxy file profiles, including Android delivery.
+`browser.knockHost` remains an alias for older browser clients. Explicit
+`client_profile.proxy.knockHost` takes precedence, including an empty value that disables it.
+Older bundles containing only the browser alias are projected to the shared field at request time.
 Chain routes inherit the entry setting unless the pair overrides `probe_resistance`.
 The setup wizard asks for the knock hostname when probe resistance is enabled.
 Apply HTTPS settings to the proxy hosts and update the config API bundle after changing it.

@@ -78,6 +78,8 @@ def build_bundle(inventory: Inventory, previous: dict[str, Any] | None = None) -
                     raise ValueError("preferHttp3 requires HTTP/3 on the same direct endpoint")
                 if resistance["enabled"] and resistance["knock"]:
                     options.setdefault("browser", {}).setdefault("knockHost", resistance["knock"][0])
+                if "knockHost" in options.get("browser", {}):
+                    options.setdefault("proxy", {}).setdefault("knockHost", options["browser"]["knockHost"])
                 https_options[json.dumps([name, route["name"]])] = options
                 bundle["https_routes"].append({
                     "host_name": name, "route_name": route["name"],

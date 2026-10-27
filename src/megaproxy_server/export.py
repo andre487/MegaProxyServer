@@ -5,7 +5,7 @@ import re
 from pathlib import Path
 from typing import Any
 
-from .config_format import configuration, https_jump_profile
+from .config_format import configuration, https_jump_profile, normalize_knock_host
 from .config_format import profile as _profile
 from .inventory import (
     atomic_write,
@@ -78,6 +78,7 @@ def export_profiles(inventory: Inventory, output: Path, include_all_jumps: bool 
                     resistance = route["probe_resistance"]
                     if resistance["enabled"] and resistance["knock"]:
                         item["browser"] = {"knockHost": resistance["knock"][0]}
+                        normalize_knock_host(item)
                     if route["name"] == "direct":
                         profiles.append(item)
                     else:
@@ -87,6 +88,7 @@ def export_profiles(inventory: Inventory, output: Path, include_all_jumps: bool 
                     if route["http3_port"] and https.masque_profiles:
                         masque = dict(proxy, type="MASQUE", port=route["http3_port"])
                         masque.pop("preferHttp3", None)
+                        masque.pop("knockHost", None)
                         profiles.append(_profile(f"{title} MASQUE / {user.name}", masque, len(profiles), route["country_code"],
                             identity=json.dumps(["masque", host_name, route["name"], user.name])))
             if https.socks5.enabled:
