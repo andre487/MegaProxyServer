@@ -32,7 +32,9 @@
     validate: "{{ omit if ansible_check_mode else '/usr/local/bin/gost-hashed-auth -check -users %s' }}"
   no_log: true
   diff: false
-  notify: Restart GostHashedAuth
+  notify:
+    - Restart GostHashedAuth
+    - Restart MegaProxy GOST
 
 - name: Install hashed authentication systemd service
   ansible.builtin.template:

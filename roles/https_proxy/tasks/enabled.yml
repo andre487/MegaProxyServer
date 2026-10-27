@@ -111,9 +111,6 @@
     creates: /opt/megaproxy/decoy/index.html
   when: megaproxy_services.https.routes | selectattr('probe_resistance.enabled') | list | length > 0
 
-- name: Install hashed incoming authentication
-  ansible.builtin.import_tasks: hashed_auth.yml
-
 - name: Install secret GOST configuration
   ansible.builtin.template:
     src: gost.yml.j2
@@ -134,6 +131,9 @@
   notify:
     - Restart MegaProxy GOST
     - Clean MegaProxy Docker resources
+
+- name: Install hashed incoming authentication
+  ansible.builtin.import_tasks: hashed_auth.yml
 
 - name: Install Docker cleanup helper
   ansible.builtin.template:
