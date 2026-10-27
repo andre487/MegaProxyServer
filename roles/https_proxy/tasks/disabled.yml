@@ -2,7 +2,7 @@
 - name: Check managed HTTPS units
   ansible.builtin.stat:
     path: "/etc/systemd/system/{{ item }}"
-  loop: [megaproxy-gost.service, megaproxy-certbot-renew.timer]
+  loop: [megaproxy-gost.service, megaproxy-certbot-renew.timer, gost-hashed-auth.service]
   register: megaproxy_https_units
 
 - name: Stop disabled HTTPS proxy and renewal timer
@@ -25,3 +25,8 @@
     path: /opt/megaproxy/gost.yml
     state: absent
   no_log: true
+
+- name: Remove disabled incoming password hashes
+  ansible.builtin.file:
+    path: /etc/gost-hashed-auth
+    state: absent

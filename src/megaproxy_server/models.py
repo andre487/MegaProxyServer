@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-from typing import Annotated, Any, Literal
 import ipaddress
 import re
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
+from .gost_auth import GOST_AUTH_PORT
 
 Port = Annotated[int, Field(ge=1, le=65535)]
 SshLogin = Annotated[str, Field(min_length=1, pattern=r"^[a-z_][a-z0-9_-]*$")]
@@ -187,17 +188,19 @@ class Host(BaseModel):
     def validate_users(self) -> Host:
         https = self.services.https
         if https and https.enabled and https.socks5.enabled:
-            ports = {self.admin.port, https.port, 18080}
+            ports = {self.admin.port, https.port, 18080, GOST_AUTH_PORT}
             if self.services.ssh and self.services.ssh.enabled:
                 ports.add(self.services.ssh.port)
             if https.socks5.port in ports:
                 raise ValueError("SOCKS5 port conflicts with another service")
         if self.services.config_api and self.services.config_api.enabled:
             ports = {self.admin.port}
+            if https and https.enabled:
+                ports.add(GOST_AUTH_PORT)
             if self.services.ssh and self.services.ssh.enabled:
                 ports.add(self.services.ssh.port)
             if ports & {self.services.config_api.port, self.services.config_api.backend_port}:
-                raise ValueError("config API ports must differ from SSH ports")
+                raise ValueError("Config API ports must differ from SSH and hashed authentication ports")
         if self.services.https:
             names = [user.name for user in self.services.https.users]
             if len(names) != len(set(names)):
@@ -333,7 +336,7 @@ class Inventory(BaseModel):
             tcp_ports = {host.admin.port}
             if host.services.ssh and host.services.ssh.enabled:
                 tcp_ports.add(host.services.ssh.port)  # Both ports belong to the same sshd.
-            listeners = [https.port] + [route["port"] for route in routes]
+            listeners = [https.port, GOST_AUTH_PORT] + [route["port"] for route in routes]
             if any(route["probe_resistance"]["enabled"] for route in routes):
                 listeners.append(18080)
             if https.certificate != "self-signed":

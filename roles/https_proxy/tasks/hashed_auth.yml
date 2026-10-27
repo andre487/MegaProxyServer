@@ -1,0 +1,66 @@
+---
+- name: Require a supported GostHashedAuth release architecture
+  ansible.builtin.assert:
+    that: ansible_facts['architecture'] in megaproxy_gost_auth_release.sha256
+    fail_msg: "No pinned GostHashedAuth binary for this architecture"
+
+- name: Install pinned GostHashedAuth release
+  ansible.builtin.get_url:
+    url: "https://github.com/andre487/GostHashedAuth/releases/download/{{ megaproxy_gost_auth_release.version }}/gost-hashed-auth_linux_{{ 'amd64' if ansible_facts['architecture'] == 'x86_64' else 'arm64' }}"
+    dest: /usr/local/bin/gost-hashed-auth
+    checksum: "sha256:{{ megaproxy_gost_auth_release.sha256[ansible_facts['architecture']] }}"
+    owner: root
+    group: root
+    mode: "0755"
+  notify: Restart GostHashedAuth
+
+- name: Create private hashed authentication directory
+  ansible.builtin.file:
+    path: /etc/gost-hashed-auth
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+
+- name: Install incoming password hashes
+  ansible.builtin.copy:
+    src: "{{ megaproxy_gost_auth_users_file }}"
+    dest: /etc/gost-hashed-auth/users.json
+    owner: root
+    group: root
+    mode: "0600"
+    validate: "{{ omit if ansible_check_mode else '/usr/local/bin/gost-hashed-auth -check -users %s' }}"
+  no_log: true
+  diff: false
+  notify:
+    - Restart GostHashedAuth
+    - Restart MegaProxy GOST
+
+- name: Install hashed authentication systemd service
+  ansible.builtin.template:
+    src: gost-hashed-auth.service.j2
+    dest: /etc/systemd/system/gost-hashed-auth.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify:
+    - Restart GostHashedAuth
+    - Restart MegaProxy GOST
+
+- name: Activate hashed authentication before GOST
+  ansible.builtin.meta: flush_handlers
+
+- name: Enable hashed authentication
+  ansible.builtin.systemd_service:
+    name: gost-hashed-auth
+    enabled: true
+    state: started
+    daemon_reload: true
+  when: not ansible_check_mode
+
+- name: Wait for hashed authentication
+  ansible.builtin.wait_for:
+    host: 127.0.0.1
+    port: "{{ megaproxy_gost_auth_port }}"
+    timeout: 15
+  when: not ansible_check_mode

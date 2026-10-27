@@ -44,11 +44,29 @@ jobs:
           echo '676fb7f78d267b6ae73df719c0c7f2b565dde7147da935cfafbc1e1da558b6d5  gost_3.3.0_linux_amd64.tar.gz' | sha256sum --check
           tar -xzf gost_3.3.0_linux_amd64.tar.gz
 
+      - name: Download pinned hashed authentication release
+        run: |
+          uv run --frozen python - <<'PYTHON'
+          import hashlib
+          import os
+          from pathlib import Path
+          from urllib.request import urlopen
+          from ruamel.yaml import YAML
+          release = YAML(typ='safe').load(Path('roles/https_proxy/vars/main.yml').read_text())['megaproxy_gost_auth_release']
+          url = f"https://github.com/andre487/GostHashedAuth/releases/download/{release['version']}/gost-hashed-auth_linux_amd64"
+          with urlopen(url, timeout=120) as response:
+              binary = response.read()
+          assert hashlib.sha256(binary).hexdigest() == release['sha256']['x86_64']
+          path = Path(os.environ['RUNNER_TEMP']) / 'gost-hashed-auth'
+          path.write_bytes(binary)
+          path.chmod(0o755)
+          PYTHON
+
       - name: Verify authenticated SOCKS5 and MASQUE TCP and UDP
-        run: uv run --frozen python tests/integration/transports.py --gost "$RUNNER_TEMP/megaproxy-gost/gost"
+        run: uv run --frozen python tests/integration/transports.py --gost "$RUNNER_TEMP/megaproxy-gost/gost" --auth "$RUNNER_TEMP/gost-hashed-auth"
 
       - name: Verify HTTPS knock, server chains and Jump
-        run: uv run --frozen python tests/integration/https.py --gost "$RUNNER_TEMP/megaproxy-gost/gost"
+        run: uv run --frozen python tests/integration/https.py --gost "$RUNNER_TEMP/megaproxy-gost/gost" --auth "$RUNNER_TEMP/gost-hashed-auth"
 
       - name: Verify HTTPS config API through nginx
         run: |
@@ -57,7 +75,11 @@ jobs:
           uv run --frozen python tests/integration/config_api.py --nginx /usr/sbin/nginx
 
   ubuntu:
-    name: Ubuntu 24.04 host
+    name: Ubuntu ${{ matrix.version }} host
+    strategy:
+      fail-fast: false
+      matrix:
+        version: ["22.04", "24.04"]
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
@@ -81,7 +103,7 @@ jobs:
           sudo lxd init --auto
 
       - name: Provision and verify host
-        run: tests/integration/lxd.sh ubuntu:24.04 1
+        run: tests/integration/lxd.sh ubuntu:${{ matrix.version }} 1
 
   two-host-jump:
     name: Debian 12 two-host Jump

@@ -1,5 +1,9 @@
 # MegaProxyServer
 
+Incoming GOST authentication uses [GostHashedAuth](https://github.com/andre487/GostHashedAuth):
+Ansible installs a pinned release with SHA-256 verification and copies only salted password hashes
+to the proxy host. Outgoing server-chain connectors still need their machine passwords.
+
 Optional [HTTP/3, MASQUE and SOCKS5 transports](docs/ru/transports.md) are controlled per host.
 SOCKS5 is disabled by default and is not recommended because it does not encrypt proxy authentication or transport.
 

@@ -93,6 +93,11 @@
       changed_when: false
       when: megaproxy_services.https is defined and megaproxy_services.https.enabled | bool
 
+    - name: Check hashed authentication service
+      ansible.builtin.command: systemctl is-active gost-hashed-auth
+      changed_when: false
+      when: megaproxy_services.https is defined and megaproxy_services.https.enabled | bool
+
     - name: Check HAProxy service state
       ansible.builtin.command: systemctl is-active haproxy
       register: haproxy_state

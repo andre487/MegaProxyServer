@@ -12,12 +12,13 @@ from pathlib import Path
 from socketserver import ThreadingTCPServer
 from threading import Thread
 
+from hashed_auth import start_hashed_auth
 from jinja2 import Environment, StrictUndefined
 from ruamel.yaml import YAML
+from transports import PASSWORD, USERNAME, TcpEcho, port, receive
 
 from megaproxy_server.inventory import ROOT, ansible_inventory
 from megaproxy_server.models import Inventory
-from transports import PASSWORD, USERNAME, TcpEcho, port, receive
 
 
 class NestedTLS:
@@ -75,6 +76,7 @@ def connect(sock, host, target_port, *, password=PASSWORD):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--gost", required=True)
+    parser.add_argument("--auth", required=True)
     args = parser.parse_args()
     echo = ThreadingTCPServer(("127.0.0.1", 0), TcpEcho)
     Thread(target=echo.serve_forever, daemon=True).start()
@@ -106,6 +108,8 @@ def main():
             variables = ansible_inventory(inv)["all"]["hosts"]
             configs = {}
             for name, public in (("entry", entry_port), ("exit", exit_port)):
+                variables[name]['megaproxy_gost_auth_port'] = port()
+                start_hashed_auth(args.auth, root, name, variables[name], processes, logs)
                 config = yaml.load(template.render(**dict(variables[name], megaproxy_container_certificate_directory=str(root))))
                 # Distinct loopback ports replace separate host network namespaces and HAProxy.
                 for service in config["services"]:

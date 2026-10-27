@@ -141,6 +141,9 @@
     mode: "0755"
   notify: Clean MegaProxy Docker resources
 
+- name: Install hashed incoming authentication
+  ansible.builtin.import_tasks: hashed_auth.yml
+
 - name: Install SNI routing configuration
   ansible.builtin.template:
     src: haproxy.cfg.j2

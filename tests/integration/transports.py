@@ -15,12 +15,13 @@ from pathlib import Path
 from socketserver import BaseRequestHandler, ThreadingTCPServer, ThreadingUDPServer
 from threading import Thread
 
+from aioquic.asyncio import QuicConnectionProtocol, connect
+from aioquic.h3.connection import H3_ALPN, H3Connection
+from aioquic.h3.events import DatagramReceived, DataReceived, HeadersReceived
+from aioquic.quic.configuration import QuicConfiguration
+from hashed_auth import start_hashed_auth
 from jinja2 import Environment, StrictUndefined
 from ruamel.yaml import YAML
-from aioquic.asyncio import connect, QuicConnectionProtocol
-from aioquic.h3.connection import H3Connection, H3_ALPN
-from aioquic.h3.events import HeadersReceived, DataReceived, DatagramReceived
-from aioquic.quic.configuration import QuicConfiguration
 
 from megaproxy_server.inventory import ROOT, ansible_inventory
 from megaproxy_server.models import Inventory
@@ -153,6 +154,7 @@ async def masque_check(proxy_port, target_port, ca, *, udp=False, password=PASSW
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--gost", required=True)
+    parser.add_argument("--auth", required=True)
     args = parser.parse_args()
     yaml = YAML(typ="safe")
     env = Environment(undefined=StrictUndefined)
@@ -196,6 +198,8 @@ def main():
                     except OSError:
                         time.sleep(.05)
                 raise AssertionError(f"{name} did not start")
+            variables['entry']['megaproxy_gost_auth_port'] = port()
+            auth_process = start_hashed_auth(args.auth, root, 'entry', variables['entry'], processes, logs)
             context = dict(variables["entry"], megaproxy_container_certificate_directory=str(root))
             start("entry", yaml.load(template.render(**context)), socks_port)
             authenticate(socks_port, password="wrong-password")
@@ -216,6 +220,14 @@ def main():
                 pass
             else:
                 raise AssertionError("MASQUE accepted an untrusted certificate")
+            auth_process.terminate()
+            auth_process.wait(timeout=5)
+            with socket.create_connection(('127.0.0.1', socks_port), timeout=5) as sock:
+                sock.sendall(b'\x05\x01\x02')
+                assert receive(sock, 2) == b'\x05\x02'
+                username, password = USERNAME.encode(), PASSWORD.encode()
+                sock.sendall(bytes([1, len(username)]) + username + bytes([len(password)]) + password)
+                assert receive(sock, 2)[1] != 0
             print("GOST transports passed: authenticated SOCKS5 TCP/UDP, bounded UDP ports, MASQUE CONNECT-TCP/CONNECT-UDP, trusted TLS and rejection of bad credentials.")
     except Exception:
         for log in logs:
