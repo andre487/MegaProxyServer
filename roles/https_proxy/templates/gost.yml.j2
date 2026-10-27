@@ -74,15 +74,9 @@ services:
 
 authers:
   - name: megaproxy-users
-    auths:
-{% for user in megaproxy_services.https.users %}
-      - username: {{ user.name | to_json }}
-        password: {{ user.password | to_json }}
-{% endfor %}
-{% if megaproxy_services.https.machine_auth %}
-      - username: {{ megaproxy_services.https.machine_auth.username | to_json }}
-        password: {{ megaproxy_services.https.machine_auth.password | to_json }}
-{% endif %}
+    plugin:
+      type: http
+      addr: "http://127.0.0.1:{{ megaproxy_gost_auth_port }}/auth"
 
 chains:
 {% for route in megaproxy_services.https.routes if route.chain %}

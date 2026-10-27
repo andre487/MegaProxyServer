@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import getpass
+import hashlib
 import io
 import ipaddress
+import json
 import os
 import re
 import shlex
@@ -11,10 +13,11 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-from ruamel.yaml import YAML
 from ansible.constants import DEFAULT_VAULT_ID_MATCH
 from ansible.parsing.vault import VaultLib, VaultSecret
+from ruamel.yaml import YAML
 
+from .gost_auth import GOST_AUTH_PORT, hash_users
 from .models import Inventory
 from .secrets import public_key
 
@@ -288,6 +291,7 @@ def ansible_inventory(inventory: Inventory) -> dict[str, Any]:
         if host.local:
             variables["ansible_ssh_common_args"] = LOCAL_SSH_ARGS
         if https and https.enabled:
+            variables["megaproxy_gost_auth_port"] = GOST_AUTH_PORT
             variables["megaproxy_https_public_routes"] = variables_public_routes
         variables["ansible_ssh_private_key_file"] = (
             host.admin.bootstrap_private_key_file or host.admin.private_key_file
@@ -311,16 +315,32 @@ def ansible_inventory(inventory: Inventory) -> dict[str, Any]:
     }
 
 
-def write_ansible_inventory(source: Path, inventory: Inventory, *, prepare_config_api: bool = False) -> Path:
+def write_ansible_inventory(source: Path, inventory: Inventory, *, prepare_services: bool = False) -> Path:
     target = ROOT / ".generated" / f"{source.stem}.ansible.yml"
     target.parent.mkdir(parents=True, exist_ok=True)
     data = ansible_inventory(inventory)
     if any(host.services.config_api and host.services.config_api.enabled for host in inventory.hosts.values()):
         bundle_path = target.with_suffix(".config-api.json")
         data["all"]["vars"]["megaproxy_config_api_bundle_file"] = str(bundle_path)
-        if prepare_config_api:
+        if prepare_services:
             from .config_bundle import write_bundle
             write_bundle(inventory, bundle_path)
+    for name, host in inventory.hosts.items():
+        https = host.services.https
+        if not https or not https.enabled:
+            continue
+        auth_path = target.parent / 'gost-auth' / f'{hashlib.sha256(name.encode()).hexdigest()}.json'
+        data['all']['hosts'][name]['megaproxy_gost_auth_users_file'] = str(auth_path)
+        if prepare_services:
+            passwords = {user.name: user.password for user in https.users}
+            machine = data['all']['hosts'][name]['megaproxy_services']['https']['machine_auth']
+            if machine:
+                passwords[machine['username']] = machine['password']
+            previous = json.loads(auth_path.read_text()) if auth_path.is_file() else {}
+            hashes = hash_users(passwords, previous)
+            content = json.dumps(hashes, sort_keys=True, indent=2) + '\n'
+            if not auth_path.is_file() or auth_path.read_text() != content:
+                atomic_write(auth_path, content)
     yaml = YAML()
     with target.open("w", encoding="utf-8") as stream:
         yaml.dump(data, stream)

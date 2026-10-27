@@ -1,5 +1,11 @@
 # MegaProxyServer guide
 
+Incoming GOST authentication is checked by local [GostHashedAuth](https://github.com/andre487/GostHashedAuth).
+Ansible installs a pinned release with SHA-256 verification and sends only salted PBKDF2-HMAC-SHA256
+verifiers to proxy hosts. Hashes are prepared on the controller and retained for unchanged credentials.
+An outgoing server-chain connector still stores its machine password. Inventory and client exports
+still contain credentials and must be protected.
+
 [Русская версия](../ru/README.md) · [Project overview](../../README.md)
 
 ## Overview

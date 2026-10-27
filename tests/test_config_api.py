@@ -576,7 +576,7 @@ def test_api_only_host_and_ansible_bundle_preparation(inventory, tmp_path, monke
     assert projected["megaproxy_config_api_url"] == "https://configs.example/api/config"
     import megaproxy_server.inventory as module
     monkeypatch.setattr(module, "ROOT", tmp_path)
-    generated = write_ansible_inventory(tmp_path / "inventory.yml", inventory, prepare_config_api=True)
+    generated = write_ansible_inventory(tmp_path / "inventory.yml", inventory, prepare_services=True)
     assert generated.with_suffix(".config-api.json").is_file()
 
 

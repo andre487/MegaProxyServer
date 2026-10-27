@@ -1,0 +1,6 @@
+---
+megaproxy_gost_auth_release:
+  version: v0.1.0
+  sha256:
+    x86_64: 5a01b67c597bfd0e424f93b09e2a64b1e4005d995587151d5e0450435f5a5db6
+    aarch64: e653ce4eb5ac4d76162315de243f8ddd1b48b63ce29cc45e15ece8f970d548b0

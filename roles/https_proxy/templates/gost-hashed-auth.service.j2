@@ -1,0 +1,28 @@
+[Unit]
+Description=GOST hashed password authentication
+After=network.target
+
+[Service]
+Type=simple
+DynamicUser=yes
+LoadCredential=users.json:/etc/gost-hashed-auth/users.json
+ExecStart=/usr/local/bin/gost-hashed-auth -listen 127.0.0.1:{{ megaproxy_gost_auth_port }} -users %d/users.json
+Restart=on-failure
+RestartSec=2
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+RestrictAddressFamilies=AF_INET AF_INET6
+CapabilityBoundingSet=
+MemoryMax=128M
+TasksMax=32
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

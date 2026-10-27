@@ -88,7 +88,7 @@ def choose_inventory(explicit: str | None, force_create: bool = False) -> Path:
 
 def run_ansible(path: Path, playbook: str, *, check: bool = False, limit: str | None = None, tags: str | None = None) -> int:
     inventory = load(path)
-    generated = write_ansible_inventory(path, inventory, prepare_config_api=playbook == "site.yml")
+    generated = write_ansible_inventory(path, inventory, prepare_services=playbook == "site.yml")
     if playbook == "site.yml" and not check:
         from ansible.inventory.manager import InventoryManager
         from ansible.parsing.dataloader import DataLoader
