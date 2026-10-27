@@ -43,7 +43,9 @@
     owner: root
     group: root
     mode: "0644"
-  notify: Restart GostHashedAuth
+  notify:
+    - Restart GostHashedAuth
+    - Restart MegaProxy GOST
 
 - name: Activate hashed authentication before GOST
   ansible.builtin.meta: flush_handlers

@@ -75,7 +75,11 @@ jobs:
           uv run --frozen python tests/integration/config_api.py --nginx /usr/sbin/nginx
 
   ubuntu:
-    name: Ubuntu 24.04 host
+    name: Ubuntu ${{ matrix.version }} host
+    strategy:
+      fail-fast: false
+      matrix:
+        version: ["22.04", "24.04"]
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
@@ -99,7 +103,7 @@ jobs:
           sudo lxd init --auto
 
       - name: Provision and verify host
-        run: tests/integration/lxd.sh ubuntu:24.04 1
+        run: tests/integration/lxd.sh ubuntu:${{ matrix.version }} 1
 
   two-host-jump:
     name: Debian 12 two-host Jump
