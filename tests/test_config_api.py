@@ -139,6 +139,9 @@ def test_knock_host_reaches_api_and_export_routes_without_affecting_masque(inven
                  if p["proxy"]["type"] == "HTTPS" and p["proxy"]["username"] == user.name]
         assert [p.get("browser", {}).get("knockHost") for p in https] == [
             "knock.example", None, "chain-knock.example"]
+        assert [p["proxy"].get("knockHost") for p in https] == [
+            "knock.example", None, "chain-knock.example"]
+        assert all("knockHost" not in p["proxy"] for p in document["profiles"] if p["proxy"]["type"] == "MASQUE")
         assert all("knockHost" not in p.get("browser", {}) for p in document["profiles"]
                    if p["proxy"]["type"] == "MASQUE")
 
@@ -626,3 +629,32 @@ def test_disabled_api_only_host_can_be_kept_for_teardown(inventory):
     raw["settings"]["https_chain_pairs"] = []
     raw["hosts"]["configs_one"]["services"]["config_api"]["enabled"] = False
     Inventory.model_validate(raw)
+
+
+def test_shared_knock_projection_and_legacy_bundles(inventory):
+    user = inventory.users.https[0]
+    for options in ({"browser": {"knockHost": "legacy.example"}},
+                    {"proxy": {"knockHost": "shared.example"}},
+                    {"proxy": {"knockHost": ""}, "browser": {"knockHost": "legacy.example"}}):
+        inventory.hosts["de_entry"].services.https.client_profile = options
+        bundle = build_bundle(inventory)
+        expected = options.get("proxy", {}).get("knockHost", "legacy.example")
+        for client in ("android", "browser_firefox", "browser_chromium"):
+            result = render_config(bundle, user.name, user.password, client)
+            validate_config(result)
+            item = next(p for p in result["profiles"] if p["proxy"]["type"] == "HTTPS")
+            assert item["proxy"]["knockHost"] == expected
+            if client == "android":
+                assert "browser" not in item
+            else:
+                assert item["browser"]["knockHost"] == expected
+
+
+def test_legacy_knock_normalization_prefers_shared_explicit_empty():
+    from megaproxy_server.config_format import normalize_knock_host
+    item = {"proxy": {"type": "HTTPS"}, "browser": {"knockHost": "legacy.example"}}
+    normalize_knock_host(item)
+    assert item["proxy"]["knockHost"] == "legacy.example"
+    item["proxy"]["knockHost"] = ""
+    normalize_knock_host(item)
+    assert item["browser"]["knockHost"] == ""

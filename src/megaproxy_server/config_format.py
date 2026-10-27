@@ -36,6 +36,7 @@ def https_jump_profile(entry: dict[str, Any], exit_profile: dict[str, Any], name
     item = deepcopy(exit_profile)
     proxy = item["proxy"]
     proxy["type"] = "HTTPS_JUMP"
+    proxy.pop("knockHost", None)
     proxy["jump"] = {k: v for k, v in entry["proxy"].items()
                      if k in {"host", "port", "allowInvalidProxyCertificate"}}
     proxy["jump"]["sameAuthentication"] = True
@@ -44,3 +45,16 @@ def https_jump_profile(entry: dict[str, Any], exit_profile: dict[str, Any], name
                         country_code if re.fullmatch(r"[A-Z]{2}", country_code) else "", identity=identity)
     item.update({k: generated[k] for k in ("id", "name", "color", "countryCode")})
     return item
+
+
+def normalize_knock_host(item: dict[str, Any]) -> None:
+    """Project legacy bundles and keep older browser consumers compatible."""
+    proxy = item["proxy"]
+    if proxy["type"] != "HTTPS":
+        proxy.pop("knockHost", None)
+        return
+    browser = item.get("browser", {})
+    if "knockHost" not in proxy and "knockHost" in browser:
+        proxy["knockHost"] = browser["knockHost"]
+    if "knockHost" in proxy:
+        item.setdefault("browser", {})["knockHost"] = proxy["knockHost"]

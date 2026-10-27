@@ -234,6 +234,21 @@
           "type": "boolean",
           "default": false,
           "description": "Optional HTTP/3 alpha preference for HTTPS and HTTPS_JUMP profiles. Try MASQUE over QUIC on the same host and numeric UDP port; Jump uses authenticated CONNECT-UDP through the first node with remote exit-host DNS. If either node lacks HTTP/3, required settings or usable datagram/path MTU, select HTTPS over TCP for the entire chain, keeping Jump mandatory. Certificate and authentication errors are terminal. Transport stays fixed for the session. HTTPS fallback blocks ordinary UDP; DNS may still use DoH. Ignored for other types; explicit MASQUE never falls back. Unsupported QUIC fingerprints use HTTPS. Firefox Jump falls back because its DATAGRAM limit cannot fit encapsulated QUIC."
+        },
+        "knockHost": {
+          "anyOf": [
+            {
+              "const": ""
+            },
+            {
+              "type": "string",
+              "maxLength": 253,
+              "minLength": 1,
+              "pattern": "^(?:[^\\s/:@?#\\\\]+|\\[?(?:[0-9a-fA-F]{0,4}:){2,7}[0-9a-fA-F]{0,4}\\]?)$"
+            }
+          ],
+          "description": "Optional shared HTTPS proxy authentication-check hostname/IP, without scheme, path or port. Empty explicitly disables it. Clients prefer this key over legacy profiles[].browser.knockHost, including when empty. Android uses it only in regular HTTPS/TCP diagnostics; an unmasked CONNECT 407 proves authentication rejection, while 200, timeouts and HTML do not prove a decoy. Never bypass the proxy for this check or log addresses/credentials.",
+          "default": ""
         }
       },
       "required": [
