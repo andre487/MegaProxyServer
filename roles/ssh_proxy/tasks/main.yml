@@ -23,9 +23,12 @@
   ansible.builtin.include_tasks: disabled.yml
   when: not megaproxy_services.ssh.enabled | bool
 
-- name: Remove inactive SSH fail2ban jail
-  ansible.builtin.file:
-    path: /etc/fail2ban/jail.d/megaproxy-sshd.local
-    state: absent
+- name: Disable inactive SSH fail2ban jail explicitly
+  ansible.builtin.copy:
+    dest: /etc/fail2ban/jail.d/megaproxy-sshd.local
+    content: "[sshd]\nenabled = false\n"
+    owner: root
+    group: root
+    mode: "0644"
   when: not megaproxy_services.ssh.enabled or not megaproxy_services.ssh.fail2ban
   notify: Restart fail2ban

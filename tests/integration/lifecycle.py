@@ -88,6 +88,8 @@ def main():
     host.services.https.enabled = False
     apply("ssh,https,firewall")
     tunnel("mp-password", password=rotated_password, accepted=False)
+    jail = subprocess.run(["sudo", "lxc", "exec", "megaproxy-ci-one", "--", "fail2ban-client", "status", "sshd"], capture_output=True)
+    assert jail.returncode != 0, jail.stdout + jail.stderr
     assert ssh(host.admin.user, admin_key).returncode == 0
     state = subprocess.run(["sudo", "lxc", "exec", "megaproxy-ci-one", "--", "systemctl", "is-active", "megaproxy-gost"], capture_output=True)
     assert state.returncode != 0
