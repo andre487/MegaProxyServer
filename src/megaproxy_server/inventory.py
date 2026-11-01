@@ -307,6 +307,7 @@ def ansible_inventory(inventory: Inventory) -> dict[str, Any]:
     return {
         "all": {
             "vars": {
+                "ansible_python_interpreter": "/usr/bin/python3",
                 "megaproxy_users": inventory.users.model_dump(mode="json"),
                 "megaproxy_public_https_hosts": public_https_hosts,
             },
