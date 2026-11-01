@@ -1,6 +1,6 @@
+import json
 from pathlib import Path
 
-import json
 import pytest
 
 from megaproxy_server.export import export_profiles, jump_candidates
@@ -33,6 +33,7 @@ def test_round_trip_and_ansible_projection(tmp_path: Path) -> None:
     save(path, source)
     loaded = load(path)
     assert loaded == source
+    assert ansible_inventory(loaded)["all"]["vars"]["ansible_python_interpreter"] == "/usr/bin/python3"
     projected = ansible_inventory(loaded)["all"]["hosts"]["one"]
     assert projected["ansible_host"] == "192.0.2.1"
     assert projected["ansible_user"] == "deploy"
