@@ -1,5 +1,9 @@
 # MegaProxyServer
 
+<p align="center">
+  <img src="docs/assets/icon-radius.svg" width="160" alt="MPX — MegaProxyServer">
+</p>
+
 Incoming GOST authentication uses [GostHashedAuth](https://github.com/andre487/GostHashedAuth):
 Ansible installs a pinned release with SHA-256 verification and copies only salted password hashes
 to the proxy host. Outgoing server-chain connectors still need their machine passwords.
