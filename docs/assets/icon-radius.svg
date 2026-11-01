@@ -1,0 +1,148 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg id="icon-radius" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 1254 1254">
+  <defs>
+    <radialGradient id="radial-gradient" cx="788.07" cy="172.02" fx="788.07" fy="172.02" r="387.03" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#fff"/>
+      <stop offset=".6" stop-color="#c5b1df"/>
+      <stop offset="1" stop-color="#a282cc"/>
+    </radialGradient>
+    <linearGradient id="linear-gradient" x1="696.96" y1="278.51" x2="823.53" y2="127.12" gradientUnits="userSpaceOnUse">
+      <stop offset=".24" stop-color="#fff"/>
+      <stop offset=".32" stop-color="#faf8fc"/>
+      <stop offset=".42" stop-color="#ece6f5"/>
+      <stop offset=".54" stop-color="#d5c9e8"/>
+      <stop offset=".67" stop-color="#b5a1d8"/>
+      <stop offset=".78" stop-color="#9578c7"/>
+    </linearGradient>
+    <linearGradient id="linear-gradient-2" x1="886.58" y1="55.64" x2="696.71" y2="280.41" gradientUnits="userSpaceOnUse">
+      <stop offset=".27" stop-color="#fff"/>
+      <stop offset=".31" stop-color="#f4f1f9"/>
+      <stop offset=".52" stop-color="#c6b5e0"/>
+      <stop offset=".68" stop-color="#a990d0"/>
+      <stop offset=".76" stop-color="#9f82cb"/>
+    </linearGradient>
+    <linearGradient id="linear-gradient-3" x1="719.32" y1="81.81" x2="896.5" y2="301.17" gradientUnits="userSpaceOnUse">
+      <stop offset=".19" stop-color="#fff"/>
+      <stop offset=".2" stop-color="#f8f6fb"/>
+      <stop offset=".23" stop-color="#e5ddf1"/>
+      <stop offset=".26" stop-color="#c7b6e1"/>
+      <stop offset=".29" stop-color="#a386cd"/>
+    </linearGradient>
+    <linearGradient id="linear-gradient-4" x1="858.32" y1="260.89" x2="750.58" y2="125.64" gradientUnits="userSpaceOnUse">
+      <stop offset=".26" stop-color="#fff"/>
+      <stop offset=".29" stop-color="#f6f3fa"/>
+      <stop offset=".35" stop-color="#dfd5ed"/>
+      <stop offset=".42" stop-color="#bba4d8"/>
+      <stop offset=".46" stop-color="#a688cd"/>
+    </linearGradient>
+    <radialGradient id="radial-gradient-2" cx="540.04" cy="110.09" fx="540.04" fy="110.09" r="71.14" gradientTransform="translate(-5.62 31.53)" gradientUnits="userSpaceOnUse">
+      <stop offset=".54" stop-color="#fff" stop-opacity=".1"/>
+      <stop offset=".69" stop-color="#787878" stop-opacity=".31"/>
+      <stop offset=".78" stop-color="#000" stop-opacity=".5"/>
+    </radialGradient>
+    <linearGradient id="linear-gradient-5" x1="473.71" y1="182.35" x2="377.84" y2="185.38" gradientUnits="userSpaceOnUse">
+      <stop offset=".1" stop-color="#fff"/>
+      <stop offset=".43" stop-color="#cbbce3"/>
+      <stop offset=".67" stop-color="#a990d0"/>
+      <stop offset=".79" stop-color="#9d80ca"/>
+    </linearGradient>
+    <linearGradient id="linear-gradient-6" x1="408.05" y1="269.22" x2="288" y2="46.67" gradientUnits="userSpaceOnUse">
+      <stop offset=".18" stop-color="#fff"/>
+      <stop offset=".26" stop-color="#fcfbfd"/>
+      <stop offset=".33" stop-color="#f3f0f9"/>
+      <stop offset=".4" stop-color="#e5ddf1"/>
+      <stop offset=".47" stop-color="#d2c3e7"/>
+      <stop offset=".54" stop-color="#b9a1da"/>
+      <stop offset=".59" stop-color="#9f7fcd"/>
+    </linearGradient>
+    <linearGradient id="linear-gradient-7" x1="31.23" y1="271.78" x2="144.1" y2="81.55" gradientUnits="userSpaceOnUse">
+      <stop offset=".21" stop-color="#fff"/>
+      <stop offset=".3" stop-color="#fcfbfd"/>
+      <stop offset=".39" stop-color="#f3f0f8"/>
+      <stop offset=".47" stop-color="#e5ddf0"/>
+      <stop offset=".55" stop-color="#d1c2e4"/>
+      <stop offset=".63" stop-color="#b7a1d6"/>
+      <stop offset=".67" stop-color="#a78ccd"/>
+    </linearGradient>
+    <symbol id="MPX" viewBox="0 0 922.07 360.17">
+      <g id="MPX-2" data-name="MPX">
+        <g id="X">
+          <path id="Contour" d="M791.2,106.24l60.14-71.59s11.89-10.97,28.73-10.97c19.14,0,40.67,14.2,40.02,37.96,1.6,19.69-16.89,36.57-16.89,36.57l-62.35,73.02,75.36,99.5s6.01,8.48,5.86,21.14c-.5,42.42-49.08,48.91-69.98,28.98-11.79-11.24-65.52-84.95-65.52-84.95l-68.31,80.5s-11.59,15.95-34.87,15.68c-27.13-.31-45.85-22.75-38.78-51.33.92-3.22,4.11-8.49,8.78-15.04,1.99-2.74,82.75-96.16,82.75-96.16l-67.15-87.82s-4.69-8.78-4.83-20.48c-.14-11.7,8.3-25.65,18.85-32.32,10.55-6.67,24.77-5.49,28.24-5.26s17.49,4.72,23.95,11.18,55.98,71.38,55.98,71.38Z" fill="#fefefe"/>
+          <polygon id="Center_Shadow" data-name="Center Shadow" points="736.16 169.56 791.25 108.13 839.98 171.48 786.58 235.9 736.16 169.56" fill="url(#radial-gradient)"/>
+          <polygon id="Shadow_Bottom_Left" data-name="Shadow Bottom Left" points="736.16 169.56 786.58 235.9 724.27 309.33 667.62 249.02 736.16 169.56" fill="url(#linear-gradient)"/>
+          <polygon id="Shadow_Top_RIght" data-name="Shadow Top RIght" points="791.25 108.13 839.98 171.48 908.99 91.81 846.74 40.13 791.25 108.13" fill="url(#linear-gradient-2)"/>
+          <polygon id="Shadow_Top_Left" data-name="Shadow Top Left" points="736.16 169.56 791.25 108.13 748.49 51.01 685.25 102.98 736.16 169.56" fill="url(#linear-gradient-3)"/>
+          <polygon id="Shadow_Bottom_Right" data-name="Shadow Bottom Right" points="840.97 170.33 786.58 235.9 844.22 311.96 904.75 255.6 840.97 170.33" fill="url(#linear-gradient-4)"/>
+        </g>
+        <g id="P">
+          <path id="Contour-2" data-name="Contour" d="M543.72,1.48s-53.27-1.45-81.79.35c-27.91,1.97-44.26,27.69-44.26,27.69,3.48,3.69,6.05,16.87,6.05,16.87,0,0,12.87,246.73,9.49,270.89-4.01,21.81-15.64,29.19-15.64,29.19,0,0,8.15,15.78,34.01,13.47,37.86-5.73,39.64-39.98,39.64-39.98l-.17-46.63s19.19,7.62,52.5,6.74c24.69-2.96,123.49-22.72,126.34-147.23C656.99,7.27,543.72,1.48,543.72,1.48ZM534.38,193.2c-29.53,0-53.47-23.37-53.47-52.2s23.94-52.2,53.47-52.2,53.47,23.37,53.47,52.2-23.94,52.2-53.47,52.2Z" fill="#fefefe"/>
+          <ellipse id="Internal_Shadow" data-name="Internal Shadow" cx="534.72" cy="141.2" rx="53.5" ry="52" fill="url(#radial-gradient-2)"/>
+          <path id="M_Shadow" data-name="M Shadow" d="M425.4,98.39s2.28-56.23-8.16-68.88c4.13-5.42,36.2-51.53,44.95,5.13,1.08,56.78,6.65,284.69,6.65,284.69,0,0-18.24,69.2-51.7,27.14,0,0,8.74-2.36,16.45-29.9.81-58.44-8.19-218.18-8.19-218.18Z" fill="url(#linear-gradient-5)"/>
+        </g>
+        <g id="M">
+          <path id="M-2" data-name="M" d="M0,307.25L30.5,46.26S39.12,2.25,86.74.07c4.6-.21,26.98-1.21,44.95,20.23,12.89,19.17,93.13,141.5,93.13,141.5L325.18,19.14S342.59-.04,369.26.13c0,0,38.6-4.56,54.09,44,2.24,50.96,10.25,266.55,10.25,266.55,0,0-.9,41.27-43.14,47.84-39.5,6.14-54.48-25.18-57.34-40.99-.42-13.48-5.14-136.27-5.14-136.27l-69.67,103.01s-16.07,16.41-35.54,16.41c-25.52-.91-36.85-17.42-36.85-17.42l-65.63-101.77-16.2,137.54s-9.37,36.59-49.23,40.93C-1.85,356.09,0,307.25,0,307.25Z" fill="#fdfefd"/>
+          <path id="Shadow_right" data-name="Shadow right" d="M427.08,137.86s-7.09-25.18-31.9-27.07c-21.79-1.23-33.17,18.77-33.17,18.77l-34.02,52.07,4.39,115.45,100.4-8.12-5.71-151.1Z" fill="url(#linear-gradient-6)"/>
+          <path id="Shadow_left" data-name="Shadow left" d="M20.19,136.96s12.1-24.36,34.17-25.98c23.53-1.53,32.82,19.63,32.82,19.63l33.11,50.87-13.71,116.89-104.36-9.82,17.98-151.58Z" fill="url(#linear-gradient-7)"/>
+        </g>
+      </g>
+    </symbol>
+    <radialGradient id="radial-gradient-3" cx="741.59" cy="752.64" fx="741.59" fy="752.64" r="309.88" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#000" stop-opacity="0"/>
+      <stop offset="1" stop-color="#b3b3b3" stop-opacity=".05"/>
+    </radialGradient>
+    <radialGradient id="radial-gradient-4" cx="741.59" cy="752.64" fx="741.59" fy="752.64" r="406.64" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#000" stop-opacity=".6"/>
+      <stop offset=".95" stop-color="#971fb7" stop-opacity=".07"/>
+      <stop offset="1" stop-color="#ab23cf" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="radial-gradient-5" cx="738.91" cy="757.04" fx="738.91" fy="757.04" r="471.65" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#000" stop-opacity="0"/>
+      <stop offset="1" stop-color="#b3b3b3" stop-opacity=".05"/>
+    </radialGradient>
+    <radialGradient id="radial-gradient-6" cx="738.91" cy="757.04" fx="738.91" fy="757.04" r="555.57" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#000" stop-opacity=".6"/>
+      <stop offset=".95" stop-color="#971fb7" stop-opacity=".07"/>
+      <stop offset="1" stop-color="#ab23cf" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="radial-gradient-7" cx="745.89" cy="748.46" fx="745.89" fy="748.46" r="616.43" xlink:href="#radial-gradient-5"/>
+    <radialGradient id="radial-gradient-8" cx="745.89" cy="748.46" fx="745.89" fy="748.46" r="747.18" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#000" stop-opacity=".6"/>
+      <stop offset=".95" stop-color="#971fb7" stop-opacity=".07"/>
+      <stop offset="1" stop-color="#ab23cf" stop-opacity="0"/>
+    </radialGradient>
+    <symbol id="Rings" viewBox="0 0 1491.77 1496.93">
+      <g>
+        <g id="Ring_1" data-name="Ring 1">
+          <path id="Inner" d="M741.59,440.35c-169.8,0-307.46,139.82-307.46,312.29s137.65,312.29,307.46,312.29,307.46-139.82,307.46-312.29-137.65-312.29-307.46-312.29ZM741.59,993.32c-130.87,0-236.96-107.76-236.96-240.68s106.09-240.68,236.96-240.68,236.96,107.76,236.96,240.68-106.09,240.68-236.96,240.68Z" fill="url(#radial-gradient-3)"/>
+          <path id="Outer" d="M741.59,342.84c-222.82,0-403.45,183.47-403.45,409.79s180.63,409.79,403.45,409.79,403.45-183.47,403.45-409.79-180.63-409.79-403.45-409.79ZM741.59,1064.93c-169.8,0-307.46-139.82-307.46-312.29s137.65-312.29,307.46-312.29,307.46,139.82,307.46,312.29-137.65,312.29-307.46,312.29Z" fill="url(#radial-gradient-4)"/>
+        </g>
+        <g id="Ring_2" data-name="Ring 2">
+          <path id="Inner-2" data-name="Inner" d="M738.91,283.2c-259.28,0-469.46,212.14-469.46,473.84s210.18,473.84,469.46,473.84,469.46-212.14,469.46-473.84-210.18-473.84-469.46-473.84ZM738.91,1140.58c-209.87,0-380-171.72-380-383.54s170.13-383.54,380-383.54,380,171.72,380,383.54-170.13,383.54-380,383.54Z" fill="url(#radial-gradient-5)"/>
+          <path id="Outer-2" data-name="Outer" d="M738.91,198.9c-305.41,0-552.99,249.89-552.99,558.14s247.58,558.14,552.99,558.14,552.99-249.89,552.99-558.14S1044.31,198.9,738.91,198.9ZM738.91,1230.88c-259.28,0-469.46-212.14-469.46-473.84s210.18-473.84,469.46-473.84,469.46,212.14,469.46,473.84-210.18,473.84-469.46,473.84Z" fill="url(#radial-gradient-6)"/>
+        </g>
+        <g id="Ring_3" data-name="Ring 3">
+          <path id="Inner-3" data-name="Inner" d="M756.99,130.97c-341.49,0-626.47,273.8-626.47,610.1s283.28,624.9,624.77,624.9,605.97-272.62,605.97-608.92S1098.48,130.97,756.99,130.97ZM754.22,1296.36c-302.99,0-554.34-256.07-554.34-554.46S452.74,200.57,755.74,200.57s536.16,257.11,536.16,555.5-234.67,540.28-537.67,540.28Z" fill="url(#radial-gradient-7)"/>
+          <path id="Outer-3" data-name="Outer" d="M759.34,0C345.43,0,0,331.87,0,739.5s343.36,757.43,757.28,757.43,734.5-330.44,734.5-738.07S1173.26,0,759.34,0ZM755.28,1365.96c-341.49,0-624.77-288.6-624.77-624.9S415.5,130.97,756.99,130.97s604.27,289.78,604.27,626.07-264.49,608.92-605.97,608.92Z" fill="url(#radial-gradient-8)"/>
+        </g>
+      </g>
+    </symbol>
+    <clipPath id="clippath">
+      <rect id="Mask" width="1254" height="1254" rx="225" ry="225" fill="none"/>
+    </clipPath>
+    <linearGradient id="linear-gradient-8" x1="48.19" y1="38.93" x2="1424.22" y2="1436.99" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#006bea"/>
+      <stop offset="1" stop-color="#d0009e"/>
+    </linearGradient>
+  </defs>
+  <g id="Icon">
+    <g clip-path="url(#clippath)">
+      <g id="icon">
+        <g id="Background">
+          <rect id="Gradient" width="1254" height="1254" fill="url(#linear-gradient-8)"/>
+          <use width="1491.77" height="1496.93" transform="translate(-147 -118) scale(1.04)" xlink:href="#Rings"/>
+        </g>
+        <use width="922.07" height="360.17" transform="translate(180 457)" xlink:href="#MPX"/>
+      </g>
+    </g>
+  </g>
+</svg>
