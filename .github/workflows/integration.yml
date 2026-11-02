@@ -132,3 +132,25 @@ jobs:
 
       - name: Provision and verify two hosts and Jump
         run: tests/integration/lxd.sh images:debian/12/cloud 2
+
+  installer:
+    name: Bash installer on ${{ matrix.image }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        image: ['ubuntu:22.04', 'ubuntu:24.04', 'images:debian/12/cloud']
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Prepare LXD and terminal driver
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y expect
+          sudo snap install lxd --channel=5.21/stable || sudo snap refresh lxd --channel=5.21/stable
+          sudo lxd waitready
+          sudo lxd init --auto
+      - name: Install from scratch through bash and verify proxy
+        run: tests/integration/installer.sh '${{ matrix.image }}'
