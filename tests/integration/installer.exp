@@ -1,0 +1,39 @@
+#!/usr/bin/expect -f
+set timeout 1200
+set guest [lindex $argv 0]
+set address [lindex $argv 1]
+set key [lindex $argv 2]
+proc answer {prompt value} {
+    expect -ex $prompt
+    after 150
+    send -- $value
+}
+spawn sudo lxc exec $guest --mode interactive -- env TERM=xterm-256color MEGAPROXY_REF=installer-ci GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=url.file:///tmp/source.git.insteadOf GIT_CONFIG_VALUE_0=https://github.com/andre487/MegaProxyServer.git bash -c {cat /tmp/install.sh | bash}
+answer {Continue?} "y\r"
+answer {Inventory host name} "installer\r"
+answer {Public IP address or DNS name} "$address\r"
+answer {Permanent administrative user} "\025megaproxy-admin\r"
+answer {Administrative SSH port} "\r"
+answer {Administrative SSH key} "\r"
+answer {Services on this host} " \r"
+answer {HTTPS endpoint} "\r"
+answer {Certificate type} "\033\[B\r"
+answer {Enable active-probe resistance?} "n"
+answer {Enable HTTP/3} "n"
+answer {HTTPS user login} "installer-user\r"
+answer {Generate a strong password?} "n"
+answer {Password} "installer-test-password-only\r"
+answer {Add another HTTPS user?} "n"
+answer {HTTPS profile title} "\r"
+answer {Ansible Vault password:} "installer-vault-test-only\r"
+expect -ex {Key saved outside this server}
+exec sudo lxc file pull $guest/opt/megaproxy-server/.secrets/keys/installer/admin-megaproxy-admin $key
+send -- "y"
+expect {
+    -ex {Setup verified. Client configurations} {}
+    eof { puts stderr "Installer exited before verification"; exit 1 }
+    timeout { puts stderr "Installer timed out"; exit 1 }
+}
+expect eof
+set result [wait]
+exit [lindex $result 3]

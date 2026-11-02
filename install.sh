@@ -54,4 +54,4 @@ main() {
     ./mega-proxy setup-local
 }
 
-main "$@"
+main "$@" 3<&0 <&3

@@ -137,3 +137,11 @@ def test_installer_can_be_piped_and_is_valid_bash():
     result = sp.run(['bash', '-s', '--', '--help'], input=script, text=True, capture_output=True)
     assert result.returncode == 0
     assert 'Interactive Debian/Ubuntu' in result.stdout
+
+
+def test_installer_restores_piped_stdin_after_terminal_prompts():
+    invocation = Path('install.sh').read_text().splitlines()[-1]
+    script = 'main() { exec </dev/null; }; ' + invocation + '\nprintf "returned\\n"\n'
+    result = sp.run(['bash'], input=script, text=True, capture_output=True, timeout=5)
+    assert result.returncode == 0
+    assert result.stdout == 'returned\n'
