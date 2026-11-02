@@ -8,7 +8,7 @@ proc answer {prompt value} {
     after 150
     send -- $value
 }
-spawn sudo lxc exec $guest --mode interactive -- env TERM=xterm-256color MEGAPROXY_REF=installer-ci GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=url.file:///tmp/source.git.insteadOf GIT_CONFIG_VALUE_0=https://github.com/andre487/MegaProxyServer.git bash -c {curl -fsSL file:///tmp/install.sh | bash}
+spawn sudo lxc exec $guest --mode interactive -- env TERM=xterm-256color MEGAPROXY_REF=installer-ci GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=url.file:///tmp/source.git.insteadOf GIT_CONFIG_VALUE_0=https://github.com/andre487/MegaProxyServer.git bash -c {cat /tmp/install.sh | bash}
 answer {Continue?} "y\r"
 answer {Inventory host name} "installer\r"
 answer {Public IP address or DNS name} "$address\r"
