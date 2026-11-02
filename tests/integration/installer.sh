@@ -28,6 +28,7 @@ if ! expect tests/integration/installer.exp "$guest" "$address" "$work_dir/admin
   sudo lxc exec "$guest" -- journalctl -u ssh -b --no-pager -n 40 || true
   sudo lxc exec "$guest" -- namei -l /home/megaproxy-admin/.ssh/authorized_keys || true
   sudo lxc exec "$guest" -- passwd -S megaproxy-admin || true
+  sudo lxc exec "$guest" -- find /root /home -name authorized_keys -printf "%p %u %m\n" || true
   exit 1
 fi
 sudo chown "$(id -u):$(id -g)" "$work_dir/admin-key"

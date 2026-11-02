@@ -17,6 +17,10 @@
     append: true
   register: megaproxy_admin_account
 
+- name: Inspect administrative home returned by user creation
+  ansible.builtin.debug:
+    msg: "{{ megaproxy_admin_account.home }}"
+
 - name: Create administrative SSH directory
   ansible.builtin.file:
     path: "{{ megaproxy_admin_account.home }}/.ssh"
