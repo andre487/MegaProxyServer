@@ -11,15 +11,12 @@
     name: "{{ megaproxy_admin.user }}"
     state: present
     create_home: true
-    password: x
+    password: "{{ lookup('ansible.builtin.password', '/dev/null', length=64) | password_hash('sha512') }}"
     update_password: on_create
     groups: sudo
     append: true
   register: megaproxy_admin_account
 
-- name: Inspect administrative home returned by user creation
-  ansible.builtin.debug:
-    msg: "{{ megaproxy_admin_account.home }}"
 
 - name: Create administrative SSH directory
   ansible.builtin.file:
