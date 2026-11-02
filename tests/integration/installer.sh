@@ -24,7 +24,12 @@ sudo lxc file push -r "$work_dir/source.git" "$guest/tmp/"
 sudo lxc exec "$guest" -- chown -R root:root /tmp/source.git
 sudo lxc file push install.sh "$guest/tmp/install.sh"
 address=$(sudo lxc list "$guest" -c 4 --format csv | awk '{print $1}')
-expect tests/integration/installer.exp "$guest" "$address" "$work_dir/admin-key"
+if ! expect tests/integration/installer.exp "$guest" "$address" "$work_dir/admin-key"; then
+  sudo lxc exec "$guest" -- journalctl -u ssh -b --no-pager -n 40 || true
+  sudo lxc exec "$guest" -- namei -l /home/megaproxy-admin/.ssh/authorized_keys || true
+  sudo lxc exec "$guest" -- passwd -S megaproxy-admin || true
+  exit 1
+fi
 sudo chown "$(id -u):$(id -g)" "$work_dir/admin-key"
 chmod 600 "$work_dir/admin-key"
 sudo lxc exec "$guest" -- cat /etc/ssh/ssh_host_ed25519_key.pub | awk -v host="$address" '{print host " " $0}' > "$work_dir/known_hosts"
