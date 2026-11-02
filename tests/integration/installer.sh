@@ -21,6 +21,7 @@ sudo lxc exec "$guest" -- sh -c "sed -i 's|http://|https://|g' /etc/apt/sources.
 git clone --bare . "$work_dir/source.git"
 git --git-dir="$work_dir/source.git" update-ref refs/heads/installer-ci HEAD
 sudo lxc file push -r "$work_dir/source.git" "$guest/tmp/"
+sudo lxc exec "$guest" -- chown -R root:root /tmp/source.git
 sudo lxc file push install.sh "$guest/tmp/install.sh"
 address=$(sudo lxc list "$guest" -c 4 --format csv | awk '{print $1}')
 expect tests/integration/installer.exp "$guest" "$address" "$work_dir/admin-key"
